@@ -13,7 +13,11 @@ This project aims to predict network packet loss events on a Metropolitan Milan 
 
 ```
 NDAL-project-2026/
-├── config.yaml               # Experiment and model configuration parameters (N, X, paths, etc.)
+├── config               # Experiment and model configuration parameters (N, X, paths etc.)
+│   └──exp1.yaml
+│   └──exp2.yaml
+│   └──exp3.yaml
+│   └──...
 ├── exploratory_analysis.ipynb # Interactive EDA and data visualization
 ├── main.py                   # Orchestrator script to run data prep, training, FL, and evaluation
 ├── run_experiments.py        # Automation script to test different N (15s, 30s, 60s) and X (5s, 10s, 20s)
@@ -36,30 +40,48 @@ NDAL-project-2026/
 ## Implementation Plan & Checklist
 
 ### Phase 1: Exploration & Setup
-- [ ] Parse configuration settings from `config.yaml`.
+- [ ] Parse configuration settings from `*.yaml`.
+- .yaml file structure example:
+[N,X]: [15,5]
+train/test:
+	- A->B: [80, 20], [0, 0]
+	- B->A: [80, 20], [0, 0]
+	- B->C: none
+	- C->B: none
+	- A->C: [80, 20], [0, 0]
+	- C->A: [80, 20], [0, 0]
+  in this case it will use only, A to B, B to A with that percentage of triaing of first window and 0, of the second for both.
+merging of dataset after parsing them from csv files.
+
 - [ ] Load and visualize raw time series data to analyze the delay vs. packet loss correlation.
 - [ ] Setup loggers and results directory structure.
 
 ### Phase 2: Data Preprocessing & Feature Engineering
-- [ ] Preprocess packet loss events (imputing `delay_ms = -1` via forward fill or interpolation).
+- [ ] Preprocess packet loss events by replacing `delay_ms = -1` with `NaN` so that subsequent window metrics are computed strictly on valid, successfully received packets (preserving the true delay distribution and avoiding bias from `-1`).
 - [ ] Implement the sliding window extractor:
-  - Input: Lookback window of size $N$ (e.g., 15s, 30s, 60s)
-  - Target: Binary label (1 if packet loss occurs in prediction window $X$, else 0)
-- [ ] Engineer statistical features from the lookback window:
-  - Mean, Jitter (standard deviation), Max, Min, Median
-  - Quantiles (90th, 95th, 99th) to capture tail spikes
-  - Trend / Slope (using linear regression coefficients)
-  - Rate of delay changes and recent delta
-  - Historical packet loss counts
-- [ ] Split dataset chronologically: keep the last few hours of each window as a hold-out test set to avoid temporal data leakage.
+  - Input: Statistical features computed over a lookback window of size $N$ (and/or the raw time-series window itself).
+  - Target: Binary label (1 if packet loss occurs in prediction window $X$, else 0).
+- [ ] Engineer statistical features from the lookback window (skipping `NaN` values to represent the actual received traffic):
+  - Base statistics: Mean, Jitter (standard deviation), Max, Min, Median
+  - Tail spikes: Quantiles (90th, 95th, 99th)
+  - Trend / Slope (`trend_slope` via rolling linear regression)
+  - Rate of delay changes (`delay_change_rate`)
+  - Recent delay delta (`recent_delta` over a short horizon $H$, e.g., 5s)
+  - Historical packet loss counts (`hist_loss_count` — counting the number of original `-1` events in the window)
+- [ ] Handle edge cases for "Link Down" windows (where all values in the lookback window are `NaN` because of complete packet loss for $N$ seconds) by imputing default maximum delay/congestion values on the computed features.
+- [ ] Implement flexible dataset splitting and cross-window scenarios:
+  - Support chronological splits (e.g., train on first 80%, test on remaining 20% of selected windows) to prevent temporal data leakage.
+  - Support training on a subset of capture windows (e.g., only first_capture_window, only second_capture_window, or both) and testing on the remainder, customizable via `config.yaml`.
 
 ### Phase 3: Model Development (Local Models)
 - [ ] Build **XGBoost Classifier** model.
   - Implement hyperparameter tuning (max_depth, learning_rate, n_estimators) with cross-validation.
   - Evaluate feature importance using XGBoost's built-in importance and SHAP/permutation.
+  - read homework1 files to get inspiration.
 - [ ] Build **Neural Network** (Multi-Layer Perceptron) model.
   - Scale features using standard scaling.
-  - Implement hyperparameter tuning (layer sizes, learning rate, activation function).
+  - Implement hyperparameter tuning (layer sizes, learning rate, activation function). 
+- read homework2 files to get inspiration. 
 - [ ] Evaluate performance using metrics: Accuracy, Precision, Recall, F1-score, MAE/MSE (if applicable), and Confusion Matrix.
 
 ### Phase 4: Federated Learning Simulation
