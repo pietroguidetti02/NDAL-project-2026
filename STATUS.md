@@ -8,7 +8,9 @@ This project aims to predict network packet loss events on a Metropolitan Milan 
   - Addressed extreme class imbalance (packet loss < 0.5%) by implementing **SMOTE** and `scale_pos_weight`.
   - Expanded dataset configuration to include all CPE pairs across both capture windows, creating a massive global dataset.
   - Lowered XGBoost decision threshold to 10% to prioritize Recall over Precision.
-  - Achieved **>80% Recall** for XGBoost on the 4G Mobile domain (correctly anticipating 1366 packet losses).
+  - **4-Way Feature Evaluation Experiment (Statistical vs. Raw Sequence):** Inspired by state-of-the-art literature on QoT Forecasting, we evaluated model performance using both aggregated statistical features (mean, jitter) and raw chronological sequences (15 exact delay values).
+    - **XGBoost** performed best with **Statistical Features** (F1: 0.40, Recall: 77%). Decision trees struggle to extract temporal patterns from raw arrays, relying heavily on hand-crafted aggregate features like jitter.
+    - **Neural Network (MLP)** performed significantly better with **Raw Sequence Features** (F1: 0.68, Recall: 62%, Precision: 75%). By feeding the raw chronological delays, the MLP successfully learned the exact temporal signature preceding a packet loss on the 4G network, drastically reducing false positives compared to XGBoost and proving the viability of sequence-based forecasting for anomaly detection.
   - **Key Insight on SD-WAN Predictive Routing (Fiber vs 4G):** 
     - **4G Mobile:** Statistical features (delay trends, jitter) show gradual degradation before a loss, allowing the models to successfully predict drops. The low precision (~15%) vs high recall is actually optimal for SD-WAN: a false alarm simply causes a safe, temporary traffic reroute to Fiber, whereas missing a drop (False Negative) degrades the user's VoIP/Video experience.
     - **Fiber:** Models fail to predict loss (0 True Positives) because fiber drops are exceedingly rare (e.g., 5 losses in over 104,000 test windows) and happen instantaneously. There is absolutely no preceding statistical degradation in the 15-second lookback window to warn the model.
