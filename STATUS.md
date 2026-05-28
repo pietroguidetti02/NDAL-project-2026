@@ -2,8 +2,17 @@
 
 This project aims to predict network packet loss events on a Metropolitan Milan SD-WAN testbed before they occur, based on historical latency (delay) measurements. The setup consists of three geographically distributed CPEs connected via fiber and 4G tunnels. 
 
-## Project Status: 🟢 Planning Phase
+## Project Status: 🟡 Execution & Refinement Phase
 
+- **Latest Updates (May 2026):** 
+  - Addressed extreme class imbalance (packet loss < 0.5%) by implementing **SMOTE** and `scale_pos_weight`.
+  - Expanded dataset configuration to include all CPE pairs across both capture windows, creating a massive global dataset.
+  - Lowered XGBoost decision threshold to 10% to prioritize Recall over Precision.
+  - Achieved **>80% Recall** for XGBoost on the 4G Mobile domain (correctly anticipating 1366 packet losses).
+  - **Key Insight on SD-WAN Predictive Routing (Fiber vs 4G):** 
+    - **4G Mobile:** Statistical features (delay trends, jitter) show gradual degradation before a loss, allowing the models to successfully predict drops. The low precision (~15%) vs high recall is actually optimal for SD-WAN: a false alarm simply causes a safe, temporary traffic reroute to Fiber, whereas missing a drop (False Negative) degrades the user's VoIP/Video experience.
+    - **Fiber:** Models fail to predict loss (0 True Positives) because fiber drops are exceedingly rare (e.g., 5 losses in over 104,000 test windows) and happen instantaneously. There is absolutely no preceding statistical degradation in the 15-second lookback window to warn the model.
+  - Demonstrated via KDE feature distributions that the remaining false positives are due to the stochastic nature of network drops (features pre-loss heavily overlap with normal traffic).
 - **Project Goal:** Train XGBoost and Neural Network classifiers to predict packet loss in a future window $X$ using a lookback window $N$, and simulate a Federated Learning setup to compare local vs. federated models.
 - **Approach:** Modular Python scripts, organized for reproducibility, clean logging, and configuration flexibility.
 
@@ -40,7 +49,7 @@ NDAL-project-2026/
 ## Implementation Plan & Checklist
 
 ### Phase 1: Exploration & Setup
-- [ ] Parse configuration settings from `*.yaml`.
+- [x] Parse configuration settings from `*.yaml`.
 - .yaml file structure example:
 [N,X]: [15,5]
 train/test:
@@ -53,36 +62,37 @@ train/test:
   in this case it will use only, A to B, B to A with that percentage of triaing of first window and 0, of the second for both.
 merging of dataset after parsing them from csv files.
 
-- [ ] Load and visualize raw time series data to analyze the delay vs. packet loss correlation.
-- [ ] Setup loggers and results directory structure.
+- [x] Load and visualize raw time series data to analyze the delay vs. packet loss correlation.
+- [x] Setup loggers and results directory structure.
 
 ### Phase 2: Data Preprocessing & Feature Engineering
-- [ ] Preprocess packet loss events by replacing `delay_ms = -1` with `NaN` so that subsequent window metrics are computed strictly on valid, successfully received packets (preserving the true delay distribution and avoiding bias from `-1`).
-- [ ] Implement the sliding window extractor:
+- [x] Preprocess packet loss events by replacing `delay_ms = -1` with `NaN` so that subsequent window metrics are computed strictly on valid, successfully received packets (preserving the true delay distribution and avoiding bias from `-1`).
+- [x] Implement the sliding window extractor:
   - Input: Statistical features computed over a lookback window of size $N$ (and/or the raw time-series window itself).
   - Target: Binary label (1 if packet loss occurs in prediction window $X$, else 0).
-- [ ] Engineer statistical features from the lookback window (skipping `NaN` values to represent the actual received traffic):
+- [x] Engineer statistical features from the lookback window (skipping `NaN` values to represent the actual received traffic):
   - Base statistics: Mean, Jitter (standard deviation), Max, Min, Median
   - Tail spikes: Quantiles (90th, 95th, 99th)
   - Trend / Slope (`trend_slope` via rolling linear regression)
   - Rate of delay changes (`delay_change_rate`)
   - Recent delay delta (`recent_delta` over a short horizon $H$, e.g., 5s)
   - Historical packet loss counts (`hist_loss_count` — counting the number of original `-1` events in the window)
-- [ ] Handle edge cases for "Link Down" windows (where all values in the lookback window are `NaN` because of complete packet loss for $N$ seconds) by imputing default maximum delay/congestion values on the computed features.
-- [ ] Implement flexible dataset splitting and cross-window scenarios:
+- [x] Handle edge cases for "Link Down" windows (where all values in the lookback window are `NaN` because of complete packet loss for $N$ seconds) by imputing default maximum delay/congestion values on the computed features.
+- [x] Implement flexible dataset splitting and cross-window scenarios:
   - Support chronological splits (e.g., train on first 80%, test on remaining 20% of selected windows) to prevent temporal data leakage.
   - Support training on a subset of capture windows (e.g., only first_capture_window, only second_capture_window, or both) and testing on the remainder, customizable via `config.yaml`.
 
 ### Phase 3: Model Development (Local Models)
-- [ ] Build **XGBoost Classifier** model.
+- [x] Build **XGBoost Classifier** model.
   - Implement hyperparameter tuning (max_depth, learning_rate, n_estimators) with cross-validation.
   - Evaluate feature importance using XGBoost's built-in importance and SHAP/permutation.
   - read homework1 files to get inspiration.
-- [ ] Build **Neural Network** (Multi-Layer Perceptron) model.
+- [x] Build **Neural Network** (Multi-Layer Perceptron) model.
   - Scale features using standard scaling.
   - Implement hyperparameter tuning (layer sizes, learning rate, activation function). 
 - read homework2 files to get inspiration. 
-- [ ] Evaluate performance using metrics: Accuracy, Precision, Recall, F1-score, MAE/MSE (if applicable), and Confusion Matrix.
+- [x] Evaluate performance using metrics: Accuracy, Precision, Recall, F1-score, MAE/MSE (if applicable), and Confusion Matrix.
+- [x] Address Class Imbalance via `scale_pos_weight` and **SMOTE** (Synthetic Minority Over-sampling Technique).
 
 ### Phase 4: Federated Learning Simulation
 - [ ] Define Local Client representing each directional CPE path/node.

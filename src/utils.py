@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import matplotlib.pyplot as plt
 import xgboost as xgb
 from sklearn.metrics import ConfusionMatrixDisplay
@@ -45,3 +46,101 @@ def plot_metrics(metrics_dict, model_name='Model', output_dir=None):
         if output_dir:
             plt.savefig(os.path.join(output_dir, f'{model_name}_confusion_matrix.png'))
         plt.show()
+
+def plot_model_comparison(metrics1, metrics2, model1_name='XGBoost', model2_name='NN', output_dir=None, prefix=''):
+    """
+    Plots a graphical comparison between two models based on their metrics.
+    """
+    def extract_per_class(cm):
+        if cm is None:
+            return [0,0], [0,0], [0,0]
+        TN, FP = cm[0,0], cm[0,1]
+        FN, TP = cm[1,0], cm[1,1]
+        
+        p0 = TN / (TN + FN) if (TN + FN) > 0 else 0
+        p1 = TP / (TP + FP) if (TP + FP) > 0 else 0
+        
+        r0 = TN / (TN + FP) if (TN + FP) > 0 else 0
+        r1 = TP / (TP + FN) if (TP + FN) > 0 else 0
+        
+        f0 = 2 * (p0 * r0) / (p0 + r0) if (p0 + r0) > 0 else 0
+        f1_class = 2 * (p1 * r1) / (p1 + r1) if (p1 + r1) > 0 else 0
+        
+        return [p0, p1], [r0, r1], [f0, f1_class]
+        
+    p_m1, r_m1, f_m1 = extract_per_class(metrics1.get('cm'))
+    p_m2, r_m2, f_m2 = extract_per_class(metrics2.get('cm'))
+    
+    # Global metrics
+    m1_global = [metrics1.get('accuracy',0), metrics1.get('precision',0), metrics1.get('recall',0), metrics1.get('f1',0)]
+    m2_global = [metrics2.get('accuracy',0), metrics2.get('precision',0), metrics2.get('recall',0), metrics2.get('f1',0)]
+    
+    label_names = ['No Loss', 'Loss']
+    
+    #---------------plots---------------#
+    xM1 = np.arange(4)-0.1 
+    xM2 = np.arange(4)+0.1 
+    x2M1 = np.arange(2)-0.1 
+    x2M2 = np.arange(2)+0.1 
+    w = 0.2       
+    
+    # 1) global metrics
+    plt.figure()
+    plt.bar(xM1, m1_global, width=w, edgecolor='black', color='c', align='center', hatch='///', label=model1_name)
+    plt.bar(xM2, m2_global, width=w, edgecolor='black', color='y', align='center', hatch='---', label=model2_name)
+    plt.xticks(np.arange(4), ["Accuracy", "Precision", "Recall", "F1-Score"])
+    plt.title(f'{model1_name} & {model2_name} performance metrics')
+    plt.ylabel('Score')
+    plt.ylim([0.0, 1.05])
+    plt.grid()
+    plt.legend()
+    if output_dir: plt.savefig(os.path.join(output_dir, f'{prefix}_comparison_global_{model1_name}_vs_{model2_name}.png'))
+    plt.show()
+
+    # 2) precision
+    plt.figure()
+    plt.bar(x2M1, p_m1, width=w, edgecolor='black', color='c', align='center', hatch='///', label=model1_name)
+    plt.bar(x2M2, p_m2, width=w, edgecolor='black', color='y', align='center', hatch='---', label=model2_name)
+    plt.plot(x2M1, [metrics1.get('precision',0)]*2, color='c', linestyle='dashed')
+    plt.plot(x2M1, [metrics2.get('precision',0)]*2, color='y', linestyle='dashed')
+    plt.xticks(np.arange(2), label_names)
+    plt.title(f'{prefix.capitalize()} - {model1_name} & {model2_name} precision')
+    plt.xlabel('Class')
+    plt.ylabel('Precision')
+    plt.ylim([0.0, 1.05])
+    plt.legend()
+    plt.grid()
+    if output_dir: plt.savefig(os.path.join(output_dir, f'{prefix}_comparison_precision_{model1_name}_vs_{model2_name}.png'))
+    plt.show()
+
+    # 3) recall
+    plt.figure()
+    plt.bar(x2M1, r_m1, width=w, edgecolor='black', color='c', align='center', hatch='///', label=model1_name)
+    plt.bar(x2M2, r_m2, width=w, edgecolor='black', color='y', align='center', hatch='---', label=model2_name)
+    plt.plot(x2M1, [metrics1.get('recall',0)]*2, color='c', linestyle='dashed')
+    plt.plot(x2M1, [metrics2.get('recall',0)]*2, color='y', linestyle='dashed')
+    plt.xticks(np.arange(2), label_names)
+    plt.title(f'{model1_name} & {model2_name} recall (global and per-class)')
+    plt.xlabel('Class')
+    plt.ylabel('Recall')
+    plt.ylim([0.0, 1.05])
+    plt.legend()
+    plt.grid()
+    if output_dir: plt.savefig(os.path.join(output_dir, f'{prefix}_comparison_recall_{model1_name}_vs_{model2_name}.png'))
+    plt.show()
+
+    # 4) f1-score
+    plt.figure()
+    plt.bar(x2M1, f_m1, width=w, edgecolor='black', color='c', align='center', hatch='///', label=model1_name)
+    plt.bar(x2M2, f_m2, width=w, edgecolor='black', color='y', align='center', hatch='---', label=model2_name)
+    plt.plot(x2M1, [metrics1.get('f1',0)]*2, color='c', linestyle='dashed')
+    plt.plot(x2M1, [metrics2.get('f1',0)]*2, color='y', linestyle='dashed')
+    plt.xticks(np.arange(2), label_names)
+    plt.title(f'{prefix.capitalize()} - {model1_name} & {model2_name} F1-score')
+    plt.xlabel('Class')
+    plt.ylabel('F1-score')
+    plt.ylim([0.0, 1.05])
+    plt.legend()
+    plt.grid()
+    if output_dir: plt.savefig(os.path.join(output_dir, f'{prefix}_comparison_f1_{model1_name}_vs_{model2_name}.png'))
+    plt.show()

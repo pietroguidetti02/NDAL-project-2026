@@ -10,7 +10,7 @@ from src.data_loader import load_config, load_and_split_data
 from src.preprocessor import clean_data
 from src.features import engineer_features
 from src.models import train_xgboost, train_nn, evaluate_model
-from src.utils import plot_feature_importance, plot_metrics
+from src.utils import plot_feature_importance, plot_metrics, plot_model_comparison
 
 def extract_single_window(i, delays, packet_loss, N, X, global_max):
     lookback_delays = delays[i : i+N]
@@ -168,6 +168,9 @@ def main():
         print(f'\n  [*] Evaluating Neural Network Model ({tunnel})...')
         nn_metrics = evaluate_model(nn_model, X_test_scaled, y_test)
         plot_metrics(nn_metrics, model_name=f'{tunnel}_Neural_Network', output_dir=output_dir)
+        
+        print(f'\n  [*] Generating Comparison Plots ({tunnel})...')
+        plot_model_comparison(xgb_metrics, nn_metrics, model1_name='XGBoost', model2_name='NN', output_dir=output_dir, prefix=tunnel)
 
     print(f'\n[*] Pipeline execution completed! All plots and metrics saved in: {output_dir}')
 
