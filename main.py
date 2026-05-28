@@ -1,17 +1,28 @@
 import argparse
 import pandas as pd
+import numpy as np
 import os
 import datetime
 from sklearn.preprocessing import StandardScaler
+from joblib import Parallel, delayed
+from imblearn.over_sampling import SMOTE
 from src.data_loader import load_config, load_and_split_data
-from src.preprocessor import clean_data, extract_sliding_windows
+from src.preprocessor import clean_data
 from src.features import engineer_features
 from src.models import train_xgboost, train_nn, evaluate_model
 from src.utils import plot_feature_importance, plot_metrics
 
+def extract_single_window(i, delays, packet_loss, N, X, global_max):
+    lookback_delays = delays[i : i+N]
+    lookback_losses = packet_loss[i : i+N]
+    pred_losses = packet_loss[i+N : i+N+X]
+    label = 1 if np.sum(pred_losses) > 0 else 0
+    feats = engineer_features(lookback_delays, lookback_losses, global_max_delay=global_max)
+    return feats, label
+
 def process_dataset(dfs, N, X):
     """
-    Given a list of dataframes, clean, extract windows, and build feature/label arrays in parallel.
+    Given a list of dataframes, clean, extract windows via NumPy, and build feature/label arrays.
     """
     X_features = []
     y_labels = []
@@ -28,16 +39,26 @@ def process_dataset(dfs, N, X):
             
         print(f"       Max delay calculated for Link Down penalty: {global_max:.2f} ms")
             
-        # Extract windows
-        windows, labels = extract_sliding_windows(df_clean, N, X)
-        print(f"       Extracted {len(windows)} sliding windows. Engineering features in parallel...")
+        # Extract features and windows completely in RAM-safe NumPy
+        delays = df_clean['delay_ms'].values
+        packet_loss = df_clean['packet_loss'].values
         
-        # Engineer features for each window
-        for window in windows:
-            feats = engineer_features(window, global_max_delay=global_max)
-            X_features.append(feats)
+        total_required = N + X
+        windows_count = len(delays) - total_required + 1
+        
+        if windows_count <= 0:
+            continue
             
-        y_labels.extend(labels)
+        print(f"       Extracting and computing features for {windows_count} windows via Parallel NumPy...")
+        
+        results = Parallel(n_jobs=-1, batch_size='auto')(
+            delayed(extract_single_window)(j, delays, packet_loss, N, X, global_max)
+            for j in range(windows_count)
+        )
+        
+        for feats, label in results:
+            X_features.append(feats)
+            y_labels.append(label)
         
     if len(X_features) == 0:
         return pd.DataFrame(), pd.Series()
@@ -103,19 +124,45 @@ def main():
         scaler = StandardScaler()
         X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train), columns=X_train.columns)
         X_test_scaled = pd.DataFrame(scaler.transform(X_test), columns=X_test.columns)
+        
+        # FIXING THE CLASS IMBALANCE (ZERO LOSS ISSUE)
+        num_neg = (y_train == 0).sum()
+        num_pos = (y_train == 1).sum()
+        scale_weight = num_neg / num_pos if num_pos > 0 else 1.0
+        print(f"  [*] Dataset Imbalance -> Negatives: {num_neg}, Positives (Losses): {num_pos}")
+        print(f"      Calculated scale_pos_weight for XGBoost: {scale_weight:.2f}")
+        
+        print(f"  [*] Applying SMOTE to balance classes for Neural Network...")
+        if num_pos > 5:
+            smote = SMOTE(random_state=42)
+            X_train_scaled_resampled, y_train_resampled = smote.fit_resample(X_train_scaled, y_train)
+            print(f"      After SMOTE -> Negatives: {(y_train_resampled == 0).sum()}, Positives: {(y_train_resampled == 1).sum()}")
+        else:
+            X_train_scaled_resampled, y_train_resampled = X_train_scaled, y_train
+            print("      Not enough positive samples for SMOTE. Using original data.")
             
         print(f'\n  [*] --- Training XGBoost Model ({tunnel}) ---')
         # n_jobs=-1 enables parallel threading inside XGBoost
-        xgb_model = train_xgboost(X_train, y_train, params={'use_label_encoder': False, 'eval_metric': 'logloss', 'n_jobs': -1})
+        # We don't necessarily need SMOTE for XGBoost because of scale_pos_weight, but we can use it.
+        # Here we stick to scale_pos_weight as original to see if it works, or we can use SMOTE data.
+        # Let's use the original X_train with scale_pos_weight for XGBoost
+        xgb_model = train_xgboost(X_train, y_train, params={
+            'use_label_encoder': False, 
+            'eval_metric': 'logloss', 
+            'n_jobs': -1,
+            'scale_pos_weight': scale_weight
+        })
         print('      Training completed.')
         
         print(f'\n  [*] Evaluating XGBoost Model ({tunnel})...')
-        xgb_metrics = evaluate_model(xgb_model, X_test, y_test)
+        # Also lower threshold to 0.05 for XGBoost because 0.10 might still be too high if model is underconfident
+        xgb_metrics = evaluate_model(xgb_model, X_test, y_test, threshold=0.05)
         plot_metrics(xgb_metrics, model_name=f'{tunnel}_XGBoost', output_dir=output_dir)
         plot_feature_importance(xgb_model, output_dir=output_dir)
         
         print(f'\n  [*] --- Training Neural Network Model (MLP) ({tunnel}) ---')
-        nn_model = train_nn(X_train_scaled, y_train, params={'max_iter': 500, 'random_state': 42})
+        # Train NN on SMOTE data
+        nn_model = train_nn(X_train_scaled_resampled, y_train_resampled, params={'max_iter': 500, 'random_state': 42})
         print('      Training completed.')
         
         print(f'\n  [*] Evaluating Neural Network Model ({tunnel})...')

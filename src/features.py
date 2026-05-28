@@ -1,46 +1,46 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 
-def engineer_features(window_df, global_max_delay=1000.0):
+def engineer_features(delays_arr, packet_loss_arr, global_max_delay=1000.0):
     """
-    Engineers statistical features from a lookback window dataframe.
+    Engineers statistical features from a lookback window numpy array.
     """
-    delays = window_df['delay_ms'].dropna()
+    valid_delays = delays_arr[~np.isnan(delays_arr)]
     
     # Base stats
-    mean_delay = delays.mean() if not delays.empty else np.nan
-    jitter = delays.std() if len(delays) > 1 else 0.0
-    max_delay = delays.max() if not delays.empty else np.nan
-    min_delay = delays.min() if not delays.empty else np.nan
-    median_delay = delays.median() if not delays.empty else np.nan
+    mean_delay = np.mean(valid_delays) if valid_delays.size > 0 else np.nan
+    jitter = np.std(valid_delays, ddof=1) if valid_delays.size > 1 else 0.0
+    max_delay = np.max(valid_delays) if valid_delays.size > 0 else np.nan
+    min_delay = np.min(valid_delays) if valid_delays.size > 0 else np.nan
+    median_delay = np.median(valid_delays) if valid_delays.size > 0 else np.nan
     
-    # Tail spikes: Quantiles (90th, 95th, 99th)
-    q90 = delays.quantile(0.90) if not delays.empty else np.nan
-    q95 = delays.quantile(0.95) if not delays.empty else np.nan
-    q99 = delays.quantile(0.99) if not delays.empty else np.nan
+    # Tail spikes
+    q90 = np.quantile(valid_delays, 0.90) if valid_delays.size > 0 else np.nan
+    q95 = np.quantile(valid_delays, 0.95) if valid_delays.size > 0 else np.nan
+    q99 = np.quantile(valid_delays, 0.99) if valid_delays.size > 0 else np.nan
     
     # Trend / Slope (linear regression over time)
-    if len(delays) > 1:
-        x = np.arange(len(delays))
-        y = delays.values
+    if valid_delays.size > 1:
+        x = np.arange(valid_delays.size)
+        y = valid_delays
         slope = np.polyfit(x, y, 1)[0]
     else:
         slope = 0.0
         
     # Rate of delay changes (mean of absolute differences)
-    if len(delays) > 1:
-        delay_change_rate = np.abs(np.diff(delays)).mean()
+    if valid_delays.size > 1:
+        delay_change_rate = np.mean(np.abs(np.diff(valid_delays)))
     else:
         delay_change_rate = 0.0
         
-    # Recent delay delta (over the entire lookback window)
-    if len(delays) > 1:
-        recent_delta = delays.iloc[-1] - delays.iloc[0]
+    # Recent delay delta
+    if valid_delays.size > 1:
+        recent_delta = valid_delays[-1] - valid_delays[0]
     else:
         recent_delta = 0.0
         
     # Historical packet loss counts
-    hist_loss_count = window_df['packet_loss'].sum()
+    hist_loss_count = np.sum(packet_loss_arr)
     
     features = {
         'mean': mean_delay,
@@ -57,9 +57,8 @@ def engineer_features(window_df, global_max_delay=1000.0):
         'hist_loss_count': hist_loss_count
     }
     
-    # Handle edge cases for 'Link Down' (where all delays are NaN due to complete packet loss)
     if pd.isna(mean_delay):
-        features['mean'] = global_max_delay  # high default delay penalty
+        features['mean'] = global_max_delay
         features['max'] = global_max_delay
         features['min'] = global_max_delay
         features['median'] = global_max_delay

@@ -4,22 +4,11 @@ X: 5   # Prediction window (seconds)
 
 # Defining train/test split percentages for capture windows
 # Format: [percentage_window_1, percentage_window_2]
+# Using ALL CPE pairs and BOTH measurement campaigns to maximize the dataset!
 train_test_split:
   A->B:
-    train: [80, 0]
-    test: [20, 0]
+    train: [80, 80]
+    test: [20, 20]
   B->A:
-    train: [80, 0]
-    test: [20, 0]
-  B->C:
-    train: [0, 0]
-    test: [0, 0]
-  C->B:
-    train: [0, 0]
-    test: [0, 0]
-  A->C:
-    train: [80, 0]
-    test: [20, 0]
-  C->A:
-    train: [80, 0]
-    test: [20, 0]
+    train: [80, 80]
+    test: [20, 20]

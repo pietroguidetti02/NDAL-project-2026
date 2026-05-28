@@ -18,11 +18,18 @@ def train_nn(X_train, y_train, params=None):
     model.fit(X_train, y_train)
     return model
 
-def evaluate_model(model, X_test, y_test):
+def evaluate_model(model, X_test, y_test, threshold=0.5):
     """
     Evaluates the given model and returns metrics.
     """
-    preds = model.predict(X_test)
+    if hasattr(model, "predict_proba"):
+        probs = model.predict_proba(X_test)
+        if probs.shape[1] > 1:
+            preds = (probs[:, 1] >= threshold).astype(int)
+        else:
+            preds = model.predict(X_test)
+    else:
+        preds = model.predict(X_test)
     metrics = {
         'accuracy': accuracy_score(y_test, preds),
         'precision': precision_score(y_test, preds, zero_division=0),

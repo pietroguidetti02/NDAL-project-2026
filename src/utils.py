@@ -27,6 +27,9 @@ def plot_metrics(metrics_dict, model_name='Model', output_dir=None):
     print(f"Precision: {metrics_dict.get('precision', 0):.4f}")
     print(f"Recall:    {metrics_dict.get('recall', 0):.4f}")
     print(f"F1 Score:  {metrics_dict.get('f1', 0):.4f}")
+    if 'cm' in metrics_dict:
+        print(f"Confusion Matrix:\n{metrics_dict['cm']}")
+
     
     if output_dir:
         # Save metrics text
