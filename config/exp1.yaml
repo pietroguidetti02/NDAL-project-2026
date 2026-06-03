@@ -1,5 +1,5 @@
 # config/exp1.yaml
-N: 60  # Lookback window (seconds)
+N: 15  # Lookback window (seconds)
 X: 10   # Prediction window (seconds)
 
 # Defining train/test split percentages for capture windows
@@ -10,9 +10,6 @@ train_test_split:
   A->C:
     train: [80, 80]
     test: [20, 20]
-  A->B:
-    train: [50, 50]
-    test: [50, 50]
   C->A:
     train: [80, 80]
     test: [20, 20]

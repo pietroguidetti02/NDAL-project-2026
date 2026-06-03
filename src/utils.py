@@ -34,7 +34,16 @@ def plot_metrics(metrics_dict, model_name='Model', output_dir=None):
     
     if output_dir:
         # Save metrics text
-        metrics_to_save = {k: v for k, v in metrics_dict.items() if k != 'cm'}
+        metrics_to_save = {}
+        for k, v in metrics_dict.items():
+            if k not in ['cm', 'y_true', 'y_pred', 'y_prob']:
+                if isinstance(v, (np.floating, float)):
+                    metrics_to_save[k] = float(v)
+                elif isinstance(v, (np.integer, int)):
+                    metrics_to_save[k] = int(v)
+                else:
+                    metrics_to_save[k] = v
+                    
         with open(os.path.join(output_dir, f'{model_name}_metrics.json'), 'w') as f:
             json.dump(metrics_to_save, f, indent=4)
             
