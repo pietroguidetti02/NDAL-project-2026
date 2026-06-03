@@ -1,0 +1,28 @@
+=== Feature Separability Report for MOBILE ===
+
+Feature                      | AUC    | KS     | MI     | Med(0)   | Med(1)   | Rec.
+------------------------------------------------------------------------------------------
+mean                         | 0.89   | 0.69   | 0.004  | 87.28    | 218.83   | ✅
+jitter                       | 0.84   | 0.57   | 0.003  | 30.67    | 86.41    | ✅
+max                          | 0.86   | 0.61   | 0.007  | 214.75   | 471.05   | ✅
+q95                          | 0.88   | 0.68   | 0.006  | 134.70   | 385.07   | ✅
+hist_loss_count              | 0.90   | 0.78   | 0.006  | 0.00     | 4.00     | ✅
+time_since_last_loss         | 0.90   | 0.78   | 0.033  | 600.00   | 3.00     | ✅
+recent_loss_count            | 0.78   | 0.57   | 0.006  | 0.00     | 1.00     | ✅
+recent_mean                  | 0.92   | 0.73   | 0.007  | 86.11    | 386.80   | ✅
+recent_max                   | 0.90   | 0.70   | 0.006  | 113.69   | 462.54   | ✅
+recent_jitter                | 0.55   | 0.22   | 0.003  | 19.25    | 32.64    | ⚠️
+recent_slope                 | 0.62   | 0.27   | 0.003  | -0.06    | 1.36     | ⚠️
+ratio_recent_mean_to_global  | 0.67   | 0.34   | 0.004  | 0.98     | 1.05     | ✅
+ratio_recent_max_to_global   | 0.68   | 0.28   | 0.002  | 0.69     | 0.87     | ✅
+spikes_over_q95              | 0.54   | 0.07   | 0.001  | 0.00     | 0.00     | ❌
+fft_energy                   | 0.94   | 0.77   | 0.006  | 1738149.39 | 63452853.71 | ✅
+fft_high_freq_energy         | 0.92   | 0.73   | 0.004  | 702465.19 | 11637595.12 | ✅
+fft_dominant_freq            | 0.74   | 0.40   | 0.002  | 0.13     | 0.02     | ✅
+fft_spectral_centroid        | 0.78   | 0.48   | 0.002  | 0.25     | 0.22     | ✅
+
+Metrics explanation:
+- AUC: 0.5 is useless. > 0.65 is very good.
+- KS: Max distance between CDFs. > 0.3 is very good.
+- MI (Mutual Info): Higher is better (0 means independent).
+- Med(0) / Med(1): The median value for No-Loss vs Loss. If they are identical, the plot overlaps heavily.

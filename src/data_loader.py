@@ -57,13 +57,27 @@ def load_and_split_data(config, base_dir="dataset"):
             train_pct = train_pcts[window_idx] / 100.0
             test_pct = test_pcts[window_idx] / 100.0
             
-            if train_pct > 0:
-                train_size = int(len(df) * train_pct)
-                train_dfs[tunnel_type].append(df.iloc[:train_size].copy())
-            if test_pct > 0:
-                # The test set comes AFTER the train set chronologically
-                start_idx = int(len(df) * train_pct)
-                end_idx = start_idx + int(len(df) * test_pct)
-                test_dfs[tunnel_type].append(df.iloc[start_idx:end_idx].copy())
+            total_pct = train_pct + test_pct
+            if total_pct > 0:
+                # Interleaved Block Splitting (Blocked Time Series Split)
+                # We split the CSV into 10 continuous time-blocks.
+                # We alternate assigning blocks to train/test based on the ratio.
+                # This ensures we get data from ALL phases of the session, while 
+                # maintaining time-series continuity within each block!
+                n_chunks = 10
+                chunk_size = len(df) // n_chunks
+                
+                test_ratio = test_pct / total_pct
+                test_interval = max(1, int(1 / test_ratio)) if test_ratio > 0 else 999
+                
+                for c in range(n_chunks):
+                    start = c * chunk_size
+                    end = (c + 1) * chunk_size if c < n_chunks - 1 else len(df)
+                    chunk_df = df.iloc[start:end].copy()
+                    
+                    if test_pct > 0 and (c + 1) % test_interval == 0:
+                        test_dfs[tunnel_type].append(chunk_df)
+                    elif train_pct > 0:
+                        train_dfs[tunnel_type].append(chunk_df)
                 
     return train_dfs, test_dfs

@@ -1,14 +1,18 @@
 # config/exp1.yaml
-N: 15  # Lookback window (seconds)
-X: 5   # Prediction window (seconds)
+N: 60  # Lookback window (seconds)
+X: 10   # Prediction window (seconds)
 
 # Defining train/test split percentages for capture windows
 # Format: [percentage_window_1, percentage_window_2]
 # Using ALL CPE pairs and BOTH measurement campaigns to maximize the dataset!
+# BEST PRACTICE FOR TIME SERIES: Train on one complete session (Window 1), Test on another (Window 2)
 train_test_split:
-  A->B:
+  A->C:
     train: [80, 80]
     test: [20, 20]
-  B->A:
+  A->B:
+    train: [50, 50]
+    test: [50, 50]
+  C->A:
     train: [80, 80]
     test: [20, 20]

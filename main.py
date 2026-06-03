@@ -112,6 +112,21 @@ def main():
         print(f"\n  [*] PHASE 2: Processing TESTING data for {tunnel}...")
         X_test, y_test = process_dataset(test_dfs, N, X)
         
+        # --- FEATURE SELECTION based on analysis reports ---
+        if tunnel == 'fiber':
+            cols_to_drop = ['mean', 'jitter', 'max', 'q95', 'ratio_recent_mean_to_global', 'spikes_over_q95']
+        elif tunnel == 'mobile':
+            cols_to_drop = ['recent_jitter', 'recent_slope', 'ratio_recent_mean_to_global', 'spikes_over_q95']
+        else:
+            cols_to_drop = []
+            
+        if cols_to_drop:
+            print(f"  [*] Dropping useless columns for {tunnel}: {cols_to_drop}")
+            cols_to_drop_actual = [c for c in cols_to_drop if c in X_train.columns]
+            X_train = X_train.drop(columns=cols_to_drop_actual)
+            X_test = X_test.drop(columns=cols_to_drop_actual)
+        # ---------------------------------------------------
+        
         print(f"\n  === Extracted Dataset Summary ({tunnel}) ===")
         print(f"  Samples in Training Set: {len(X_train)}")
         print(f"  Samples in Testing Set: {len(X_test)}")
