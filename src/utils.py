@@ -54,7 +54,32 @@ def plot_metrics(metrics_dict, model_name='Model', output_dir=None):
         plt.grid(False) # Turn off grid for CM to look clean
         if output_dir:
             plt.savefig(os.path.join(output_dir, f'{model_name}_confusion_matrix.png'))
-        plt.show()
+        plt.show(block=False)
+        plt.pause(1)
+        plt.close()
+        
+        # Also plot and save individual ROC and PR curves
+        if 'y_prob' in metrics_dict and 'y_true' in metrics_dict:
+            fpr, tpr, _ = roc_curve(metrics_dict['y_true'], metrics_dict['y_prob'])
+            roc_auc = auc(fpr, tpr)
+            precision, recall, _ = precision_recall_curve(metrics_dict['y_true'], metrics_dict['y_prob'])
+            pr_auc = average_precision_score(metrics_dict['y_true'], metrics_dict['y_prob'])
+            
+            plt.figure(figsize=(12, 5))
+            plt.subplot(1, 2, 1)
+            plt.plot(fpr, tpr, lw=2, label=f'AUC = {roc_auc:.3f}')
+            plt.plot([0, 1], [0, 1], 'k--')
+            plt.title(f'{model_name} - ROC Curve')
+            plt.legend()
+            plt.subplot(1, 2, 2)
+            plt.plot(recall, precision, lw=2, label=f'PR AUC = {pr_auc:.3f}')
+            plt.title(f'{model_name} - PR Curve')
+            plt.legend()
+            if output_dir:
+                plt.savefig(os.path.join(output_dir, f'{model_name}_roc_pr.png'))
+            plt.show(block=False)
+            plt.pause(1)
+            plt.close()
 
 def plot_model_comparison(metrics1, metrics2, model1_name='XGBoost', model2_name='NN', output_dir=None, prefix=''):
     """

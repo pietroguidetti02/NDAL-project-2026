@@ -1,4 +1,5 @@
 import xgboost as xgb
+import numpy as np
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from sklearn.neural_network import MLPClassifier
 
@@ -40,17 +41,20 @@ def evaluate_model(model, X_test, y_test, threshold=0.5):
         else:
             y_prob = preds_raw
             
-    # Find optimal threshold using PR curve
-    try:
-        precision, recall, thresholds = precision_recall_curve(y_test, y_prob)
-        num = 2 * (precision * recall)
-        den = (precision + recall)
-        f1_scores = np.divide(num, den, out=np.zeros_like(num), where=den!=0)
-        
-        opt_idx = np.argmax(f1_scores)
-        optimal_threshold = thresholds[opt_idx] if opt_idx < len(thresholds) else thresholds[-1]
-    except Exception as e:
-        # Fallback to default if something fails
+    # Find optimal threshold using PR curve (only if there are positive samples)
+    if np.sum(y_test) > 0:
+        try:
+            precision, recall, thresholds = precision_recall_curve(y_test, y_prob)
+            num = 2 * (precision * recall)
+            den = (precision + recall)
+            f1_scores = np.divide(num, den, out=np.zeros_like(num), where=den!=0)
+            
+            opt_idx = np.argmax(f1_scores)
+            optimal_threshold = thresholds[opt_idx] if opt_idx < len(thresholds) else thresholds[-1]
+        except Exception as e:
+            optimal_threshold = threshold
+    else:
+        print("[!] Warning: No positive samples in test set! Skipping F1 threshold optimization.")
         optimal_threshold = threshold
         
     print(f"Computed Optimal F1 Threshold: {optimal_threshold:.4f} (Default was: {threshold})")

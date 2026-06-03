@@ -98,7 +98,7 @@ def main():
     print("[*] Starting data loading and splitting...")
     train_dfs_dict, test_dfs_dict = load_and_split_data(config)
     
-    tunnel_types = ['fiber', 'mobile']
+    tunnel_types = config.get('tunnel_types', ['fiber', 'mobile'])
     
     for tunnel in tunnel_types:
         print(f"\n========================================================")
@@ -183,12 +183,7 @@ def main():
         xgb_metrics = evaluate_model(xgb_model, X_test_df, y_test, threshold=0.05)
         plot_metrics(xgb_metrics, model_name=f'{tunnel}_XGBoost', output_dir=output_dir)
         
-        print(f'\n  [*] --- Training 2/3: Neural Network Model (MLP) ({tunnel}) ---')
-        nn_model = train_nn(X_train_scaled_resampled, y_train_resampled, params={'max_iter': 500, 'random_state': 42})
-        nn_metrics = evaluate_model(nn_model, X_test_scaled, y_test)
-        plot_metrics(nn_metrics, model_name=f'{tunnel}_NN', output_dir=output_dir)
-        
-        print(f'\n  [*] --- Training 3/3: LSTM Model (Deep Learning sequence) ({tunnel}) ---')
+        print(f'\n  [*] --- Training 2/3: LSTM Model (Deep Learning sequence) ({tunnel}) ---')
         try:
             # We don't use SMOTE for LSTM because synthesizing sequences is hard,
             # we rely on class_weight inside train_lstm
@@ -198,6 +193,11 @@ def main():
         except Exception as e:
             print(f"[!] Error training LSTM: {e}")
             lstm_metrics = None
+            
+        print(f'\n  [*] --- Training 3/3: Neural Network Model (MLP) ({tunnel}) ---')
+        nn_model = train_nn(X_train_scaled_resampled, y_train_resampled, params={'max_iter': 500, 'random_state': 42})
+        nn_metrics = evaluate_model(nn_model, X_test_scaled, y_test)
+        plot_metrics(nn_metrics, model_name=f'{tunnel}_NN', output_dir=output_dir)
         
         # ================== COMPARISON ==================
         if lstm_metrics is not None:

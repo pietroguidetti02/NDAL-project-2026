@@ -73,7 +73,7 @@ def main():
     X = config.get('X', 5)
     
     train_dfs_dict, test_dfs_dict = load_and_split_data(config)
-    tunnel_types = ['fiber', 'mobile']
+    tunnel_types = config.get('tunnel_types', ['fiber', 'mobile'])
     
     for tunnel in tunnel_types:
         print(f"\n========================================================")
