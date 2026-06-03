@@ -84,8 +84,9 @@ def main():
     parser.add_argument('--config', type=str, default='config/exp1.yaml', help='Path to config file')
     args = parser.parse_args()
     
+    config_name = os.path.splitext(os.path.basename(args.config))[0]
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = os.path.join("results", f"exp_LSTM_{timestamp}")
+    output_dir = os.path.join("results", f"exp_LSTM_{config_name}_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
     print(f"=== Created results directory: {output_dir} ===")
     

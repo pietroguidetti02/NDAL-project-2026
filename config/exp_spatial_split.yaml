@@ -1,0 +1,23 @@
+N: 60
+X: 10
+tunnel_types:
+  - mobile
+train_test_split:
+  A->B:
+    train: [80, 80]
+    test: [0, 0]
+  A->C:
+    train: [80, 80]
+    test: [0, 0]
+  B->A:
+    train: [80, 80]
+    test: [0, 0]
+  B->C:
+    train: [0, 0]
+    test: [100, 100]
+  C->A:
+    train: [0, 0]
+    test: [100, 100]
+  C->B:
+    train: [0, 0]
+    test: [100, 100]
