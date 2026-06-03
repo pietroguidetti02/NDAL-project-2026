@@ -21,25 +21,43 @@ def train_nn(X_train, y_train, params=None):
 def evaluate_model(model, X_test, y_test, threshold=0.5):
     """
     Evaluates the given model and returns metrics.
+    It calculates the optimal F1 threshold from the Precision-Recall curve
+    and uses that threshold to compute the final confusion matrix and metrics.
     """
+    import numpy as np
+    from sklearn.metrics import precision_recall_curve
+
     if hasattr(model, "predict_proba"):
         probs = model.predict_proba(X_test)
         if probs.shape[1] > 1:
             y_prob = probs[:, 1]
-            preds = (y_prob >= threshold).astype(int)
         else:
             y_prob = probs[:, 0]
-            preds = (y_prob >= threshold).astype(int)
     else:
         preds_raw = model.predict(X_test)
-        # If it's a Keras model, it returns probabilities of shape (samples, 1)
         if len(preds_raw.shape) == 2 and preds_raw.shape[1] == 1:
             y_prob = preds_raw[:, 0]
-            preds = (y_prob >= threshold).astype(int)
         else:
             y_prob = preds_raw
-            preds = preds_raw
+            
+    # Find optimal threshold using PR curve
+    try:
+        precision, recall, thresholds = precision_recall_curve(y_test, y_prob)
+        num = 2 * (precision * recall)
+        den = (precision + recall)
+        f1_scores = np.divide(num, den, out=np.zeros_like(num), where=den!=0)
+        
+        opt_idx = np.argmax(f1_scores)
+        optimal_threshold = thresholds[opt_idx] if opt_idx < len(thresholds) else thresholds[-1]
+    except Exception as e:
+        # Fallback to default if something fails
+        optimal_threshold = threshold
+        
+    print(f"Computed Optimal F1 Threshold: {optimal_threshold:.4f} (Default was: {threshold})")
+    preds = (y_prob >= optimal_threshold).astype(int)
+
     metrics = {
+        'optimal_threshold': float(optimal_threshold),
         'accuracy': accuracy_score(y_test, preds),
         'precision': precision_score(y_test, preds, zero_division=0),
         'recall': recall_score(y_test, preds, zero_division=0),
