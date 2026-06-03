@@ -2,6 +2,9 @@
 N: 15  # Lookback window (seconds)
 X: 10   # Prediction window (seconds)
 
+tunnel_types:                                                         
+  - mobile      
+
 # Defining train/test split percentages for capture windows
 # Format: [percentage_window_1, percentage_window_2]
 # Using ALL CPE pairs and BOTH measurement campaigns to maximize the dataset!
