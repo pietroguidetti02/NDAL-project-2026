@@ -3,6 +3,35 @@ import numpy as np
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from sklearn.neural_network import MLPClassifier
 
+def optimize_threshold_cv(model, X_train, y_train, cv=3):
+    """
+    Finds the optimal F1 threshold using out-of-fold predictions.
+    """
+    from sklearn.model_selection import cross_val_predict
+    from sklearn.metrics import precision_recall_curve
+    import numpy as np
+
+    print("      [CV] Computing out-of-fold predictions for threshold optimization...")
+    try:
+        probs = cross_val_predict(model, X_train, y_train, cv=cv, method='predict_proba')
+        y_prob = probs[:, 1] if probs.shape[1] > 1 else probs[:, 0]
+    except Exception as e:
+        preds = cross_val_predict(model, X_train, y_train, cv=cv)
+        y_prob = preds[:, 0] if (len(preds.shape) == 2 and preds.shape[1] == 1) else preds
+
+    y_prob = np.nan_to_num(y_prob, nan=0.0)
+
+    if np.sum(y_train) > 0:
+        precision, recall, thresholds = precision_recall_curve(y_train, y_prob)
+        num = 2 * (precision * recall)
+        den = (precision + recall)
+        f1_scores = np.divide(num, den, out=np.zeros_like(num), where=den!=0)
+        opt_idx = np.argmax(f1_scores)
+        optimal_threshold = thresholds[opt_idx] if opt_idx < len(thresholds) else thresholds[-1]
+        print(f"      [CV] Found optimal threshold: {optimal_threshold:.4f}")
+        return float(optimal_threshold)
+    return 0.5
+
 def train_xgboost(X_train, y_train, params=None):
     """
     Trains an XGBoost model.
@@ -44,34 +73,8 @@ def evaluate_model(model, X_test, y_test, threshold=0.5):
     # Sanitize y_prob against NaNs (though we fixed the source, robustness is good)
     y_prob = np.nan_to_num(y_prob, nan=0.0)
             
-    # Find optimal threshold using PR curve (only if there are positive samples)
-    if np.sum(y_test) > 0:
-        try:
-            # If y_prob is constant, PR curve optimization might be unstable
-            if np.all(y_prob == y_prob[0]):
-                print(f"[!] Warning: Model is predicting a constant probability ({y_prob[0]:.4f}). Threshold optimization may be degenerate.")
-                optimal_threshold = threshold
-            else:
-                precision, recall, thresholds = precision_recall_curve(y_test, y_prob)
-                num = 2 * (precision * recall)
-                den = (precision + recall)
-                f1_scores = np.divide(num, den, out=np.zeros_like(num), where=den!=0)
-                
-                opt_idx = np.argmax(f1_scores)
-                optimal_threshold = thresholds[opt_idx] if opt_idx < len(thresholds) else thresholds[-1]
-                
-                # If the optimal threshold is extremely low/high due to constant-ish output, 
-                # keep it but print a strong warning.
-                if optimal_threshold < 1e-7 or optimal_threshold > 0.999999:
-                     print(f"[!] Warning: Optimal threshold is extreme ({optimal_threshold:.4e}). Model might be poorly calibrated.")
-        except Exception as e:
-            print(f"[!] Error during threshold optimization: {e}. Falling back to default.")
-            optimal_threshold = threshold
-    else:
-        print("[!] Warning: No positive samples in test set! Skipping F1 threshold optimization.")
-        optimal_threshold = threshold
-        
-    print(f"Computed Optimal F1 Threshold: {optimal_threshold:.4f} (Default was: {threshold})")
+    optimal_threshold = threshold
+    print(f"Using Threshold: {optimal_threshold:.4f}")
     preds = (y_prob >= optimal_threshold).astype(int)
 
     metrics = {

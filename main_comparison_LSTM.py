@@ -14,7 +14,7 @@ sys.path.append(os.getcwd())
 from src.data_loader import load_config, load_and_split_data
 from src.preprocessor import clean_data
 from src.features import engineer_features
-from src.models import train_xgboost, train_nn, evaluate_model, train_lstm
+from src.models import train_xgboost, train_nn, evaluate_model, train_lstm, optimize_threshold_cv
 from src.utils import plot_feature_importance, plot_metrics, plot_model_comparison_3, plot_roc_pr_curves_3
 
 def extract_single_window_all(i, delays, packet_loss, N, X, global_max):
@@ -166,25 +166,33 @@ def main():
         # FIXING THE CLASS IMBALANCE
         num_neg = (y_train == 0).sum()
         num_pos = (y_train == 1).sum()
-        scale_weight = num_neg / num_pos if num_pos > 0 else 1.0
         print(f"  [*] Dataset Imbalance -> Negatives: {num_neg}, Positives (Losses): {num_pos}")
         
-        print(f"  [*] Applying SMOTE to balance classes for Neural Network...")
+        print(f"  [*] Applying Hybrid Resampling (RandomUnderSampler + SMOTE) for Tabular Models...")
         if num_pos > 5:
-            smote = SMOTE(random_state=42)
-            X_train_scaled_resampled, y_train_resampled = smote.fit_resample(X_train_scaled, y_train)
+            from imblearn.under_sampling import RandomUnderSampler
+            
+            target_neg = max(10000, num_pos)
+            target_neg = min(target_neg, num_neg)
+            
+            rus = RandomUnderSampler(sampling_strategy={0: target_neg, 1: num_pos}, random_state=42)
+            smote = SMOTE(sampling_strategy={0: target_neg, 1: target_neg}, random_state=42)
+            
+            X_train_rus, y_train_rus = rus.fit_resample(X_train_scaled, y_train)
+            X_train_scaled_resampled, y_train_resampled = smote.fit_resample(X_train_rus, y_train_rus)
+            print(f"      After Hybrid Resampling -> Negatives: {(y_train_resampled == 0).sum()}, Positives: {(y_train_resampled == 1).sum()}")
         else:
             X_train_scaled_resampled, y_train_resampled = X_train_scaled, y_train
+            print("      Not enough positive samples for resampling. Using original data.")
             
         # ================== TRAINING MODELS ==================
         print(f'\n  [*] --- Training 1/3: XGBoost Model ({tunnel}) ---')
-        xgb_model = train_xgboost(X_train_df, y_train, params={
-            'use_label_encoder': False, 
-            'eval_metric': 'logloss', 
-            'n_jobs': -1,
-            'scale_pos_weight': scale_weight
-        })
-        xgb_metrics = evaluate_model(xgb_model, X_test_df, y_test, threshold=0.05)
+        import xgboost as xgb
+        xgb_params = {'use_label_encoder': False, 'eval_metric': 'logloss', 'n_jobs': -1}
+        xgb_base = xgb.XGBClassifier(**xgb_params)
+        xgb_thresh = optimize_threshold_cv(xgb_base, X_train_scaled_resampled, y_train_resampled, cv=3)
+        xgb_model = train_xgboost(X_train_scaled_resampled, y_train_resampled, params=xgb_params)
+        xgb_metrics = evaluate_model(xgb_model, X_test_scaled, y_test, threshold=xgb_thresh)
         plot_metrics(xgb_metrics, model_name=f'{tunnel}_XGBoost', output_dir=output_dir)
         
         print(f'\n  [*] --- Training 2/3: LSTM Model (Deep Learning sequence) ({tunnel}) ---')
@@ -199,8 +207,12 @@ def main():
             lstm_metrics = None
             
         print(f'\n  [*] --- Training 3/3: Neural Network Model (MLP) ({tunnel}) ---')
-        nn_model = train_nn(X_train_scaled_resampled, y_train_resampled, params={'max_iter': 500, 'random_state': 42})
-        nn_metrics = evaluate_model(nn_model, X_test_scaled, y_test)
+        from sklearn.neural_network import MLPClassifier
+        nn_params = {'max_iter': 500, 'random_state': 42}
+        nn_base = MLPClassifier(**nn_params)
+        nn_thresh = optimize_threshold_cv(nn_base, X_train_scaled_resampled, y_train_resampled, cv=3)
+        nn_model = train_nn(X_train_scaled_resampled, y_train_resampled, params=nn_params)
+        nn_metrics = evaluate_model(nn_model, X_test_scaled, y_test, threshold=nn_thresh)
         plot_metrics(nn_metrics, model_name=f'{tunnel}_NN', output_dir=output_dir)
         
         # ================== COMPARISON ==================
