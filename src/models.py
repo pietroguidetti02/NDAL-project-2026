@@ -41,17 +41,31 @@ def evaluate_model(model, X_test, y_test, threshold=0.5):
         else:
             y_prob = preds_raw
             
+    # Sanitize y_prob against NaNs (though we fixed the source, robustness is good)
+    y_prob = np.nan_to_num(y_prob, nan=0.0)
+            
     # Find optimal threshold using PR curve (only if there are positive samples)
     if np.sum(y_test) > 0:
         try:
-            precision, recall, thresholds = precision_recall_curve(y_test, y_prob)
-            num = 2 * (precision * recall)
-            den = (precision + recall)
-            f1_scores = np.divide(num, den, out=np.zeros_like(num), where=den!=0)
-            
-            opt_idx = np.argmax(f1_scores)
-            optimal_threshold = thresholds[opt_idx] if opt_idx < len(thresholds) else thresholds[-1]
+            # If y_prob is constant, PR curve optimization might be unstable
+            if np.all(y_prob == y_prob[0]):
+                print(f"[!] Warning: Model is predicting a constant probability ({y_prob[0]:.4f}). Threshold optimization may be degenerate.")
+                optimal_threshold = threshold
+            else:
+                precision, recall, thresholds = precision_recall_curve(y_test, y_prob)
+                num = 2 * (precision * recall)
+                den = (precision + recall)
+                f1_scores = np.divide(num, den, out=np.zeros_like(num), where=den!=0)
+                
+                opt_idx = np.argmax(f1_scores)
+                optimal_threshold = thresholds[opt_idx] if opt_idx < len(thresholds) else thresholds[-1]
+                
+                # If the optimal threshold is extremely low/high due to constant-ish output, 
+                # keep it but print a strong warning.
+                if optimal_threshold < 1e-7 or optimal_threshold > 0.999999:
+                     print(f"[!] Warning: Optimal threshold is extreme ({optimal_threshold:.4e}). Model might be poorly calibrated.")
         except Exception as e:
+            print(f"[!] Error during threshold optimization: {e}. Falling back to default.")
             optimal_threshold = threshold
     else:
         print("[!] Warning: No positive samples in test set! Skipping F1 threshold optimization.")
