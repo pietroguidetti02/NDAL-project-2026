@@ -4,19 +4,17 @@ This project aims to predict network packet loss events on a Metropolitan Milan 
 
 ## Project Status: 🟡 Execution & Refinement Phase
 
-- **Latest Updates (May 2026):** 
-  - Addressed extreme class imbalance (packet loss < 0.5%) by implementing **SMOTE** and `scale_pos_weight`.
-  - Expanded dataset configuration to include all CPE pairs across both capture windows, creating a massive global dataset.
-  - Lowered XGBoost decision threshold to 10% to prioritize Recall over Precision.
-  - **4-Way Feature Evaluation Experiment (Statistical vs. Raw Sequence):** Inspired by state-of-the-art literature on QoT Forecasting, we evaluated model performance using both aggregated statistical features (mean, jitter) and raw chronological sequences (15 exact delay values).
+- **Latest Updates (June 2026):** 
+  - **LSTM Integration & Homework Fusion:** Created `main_comparison_LSTM.py` to evaluate three completely different architectures side-by-side: XGBoost (tabular, from H1), MLP Neural Network (tabular, from H2), and LSTM (time-series, from H3). This unified pipeline standardizes evaluation across all course topics.
+  - **Optimal Threshold Discovery (The PR-Curve Fix):** Discovered that a rigid `0.5` decision threshold masks the model's intelligence due to extreme class imbalance (giving empty confusion matrices). Modified `evaluate_model` to dynamically compute the **Optimal F1-Score Threshold** from the Precision-Recall curve (which often drops to ~0.08), drastically recovering True Positives.
+  - **Data Physics & The "Invisible Fault":** Ran a direct Pearson correlation analysis on the raw signals. Discovered that on certain links (`cpe_a-cpe_c`), delay is highly predictive of future loss (delay doubles before failure). However, on other links (like `fiber` and `cpe_a-cpe_b`), packet loss is an instantaneous catastrophic event with **zero correlation** to historical delay. Implemented safe-guards in the pipeline to handle perfectly clean test sets (0 faults) where PR-optimization would otherwise divide by zero.
+  - **Dynamic Configuration:** Extracted `tunnel_types` into the `config.yaml` to allow seamless toggling between evaluating solely on `mobile` or `fiber` without altering source code.
+  - Addressed extreme class imbalance (packet loss < 0.5%) by implementing **SMOTE** and `scale_pos_weight` and custom `class_weights` with initial bias tuning for Deep Learning.
+  - **4-Way Feature Evaluation Experiment (Statistical vs. Raw Sequence):** 
     - **XGBoost** performed best with **Statistical Features** (F1: 0.40, Recall: 77%). Decision trees struggle to extract temporal patterns from raw arrays, relying heavily on hand-crafted aggregate features like jitter.
-    - **Neural Network (MLP)** performed significantly better with **Raw Sequence Features** (F1: 0.68, Recall: 62%, Precision: 75%). By feeding the raw chronological delays, the MLP successfully learned the exact temporal signature preceding a packet loss on the 4G network, drastically reducing false positives compared to XGBoost and proving the viability of sequence-based forecasting for anomaly detection.
-  - **Key Insight on SD-WAN Predictive Routing (Fiber vs 4G):** 
-    - **4G Mobile:** Statistical features (delay trends, jitter) show gradual degradation before a loss, allowing the models to successfully predict drops. The low precision (~15%) vs high recall is actually optimal for SD-WAN: a false alarm simply causes a safe, temporary traffic reroute to Fiber, whereas missing a drop (False Negative) degrades the user's VoIP/Video experience.
-    - **Fiber:** Models fail to predict loss (0 True Positives) because fiber drops are exceedingly rare (e.g., 5 losses in over 104,000 test windows) and happen instantaneously. There is absolutely no preceding statistical degradation in the 15-second lookback window to warn the model.
-  - Demonstrated via KDE feature distributions that the remaining false positives are due to the stochastic nature of network drops (features pre-loss heavily overlap with normal traffic).
-- **Project Goal:** Train XGBoost and Neural Network classifiers to predict packet loss in a future window $X$ using a lookback window $N$, and simulate a Federated Learning setup to compare local vs. federated models.
-- **Approach:** Modular Python scripts, organized for reproducibility, clean logging, and configuration flexibility.
+    - **Neural Network (MLP)** performed significantly better with **Raw Sequence Features** (F1: 0.68, Recall: 62%, Precision: 75%).
+- **Project Goal:** Train XGBoost, Neural Networks, and LSTMs to predict packet loss in a future window $X$ using a lookback window $N$, and simulate a Federated Learning setup to compare local vs. federated models.
+- **Approach:** Modular Python scripts, organized for reproducibility, clean logging, live ROC/PR curve plotting, and configuration flexibility.
 
 ---
 
