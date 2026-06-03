@@ -1,5 +1,5 @@
-N: 60
-X: 10
+N_values: [10, 15, 20, 30, 60]
+X_values: [1, 5, 10, 15, 20]
 tunnel_types:
   - mobile
 train_test_split:

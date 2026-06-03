@@ -4,9 +4,7 @@ import shutil
 import time
 
 # I tre esperimenti principali che vogliamo lanciare in parallelo
-configs = [
-    "config/exp2.yaml",              
-    "config/exp3.yaml", 
+configs = [ 
     "config/exp_time_split.yaml",    # Train su First Window, Test su Second Window
     "config/exp_spatial_split.yaml"  # Train su A->B/A->C, Test sui link di C
 ]

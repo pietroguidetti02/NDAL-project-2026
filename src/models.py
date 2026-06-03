@@ -138,6 +138,7 @@ def train_lstm(X_train_seq, y_train, params=None):
         class_weight = None
     
     # Train
-    model.fit(X_train_seq, y_train, epochs=epochs, batch_size=batch_size, validation_split=0.1, callbacks=[es], class_weight=class_weight, verbose=1)
+    verbose = params.get('verbose', 1) if params else 1
+    model.fit(X_train_seq, y_train, epochs=epochs, batch_size=batch_size, validation_split=0.1, callbacks=[es], class_weight=class_weight, verbose=verbose)
     
     return model
