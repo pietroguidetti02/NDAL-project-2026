@@ -2,7 +2,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import xgboost as xgb
-from sklearn.metrics import ConfusionMatrixDisplay
+from sklearn.metrics import ConfusionMatrixDisplay, roc_curve, auc, precision_recall_curve, average_precision_score
 import json
 
 def plot_feature_importance(model, feature_names=None, output_dir=None):
@@ -203,4 +203,80 @@ def plot_model_comparison_3(metrics1, metrics2, metrics3, m1_name='XGBoost', m2_
     plt.legend()
     plt.grid(True, axis='y')
     if output_dir: plt.savefig(os.path.join(output_dir, f'{prefix}_comparison_f1_3models.png'))
+    plt.show()
+
+def plot_roc_pr_curves_2(metrics1, metrics2, m1_name='XGBoost', m2_name='NN', output_dir=None, prefix=''):
+    """
+    Plots ROC and PR Curves for two models.
+    """
+    plt.figure(figsize=(14, 6))
+    
+    # Plot ROC
+    plt.subplot(1, 2, 1)
+    for m, name, color in zip([metrics1, metrics2], [m1_name, m2_name], ['c', 'y']):
+        if m is not None and 'y_prob' in m and 'y_true' in m:
+            fpr, tpr, _ = roc_curve(m['y_true'], m['y_prob'])
+            roc_auc = auc(fpr, tpr)
+            plt.plot(fpr, tpr, color=color, lw=2, label=f'{name} (AUC = {roc_auc:.3f})')
+    plt.plot([0, 1], [0, 1], 'k--', lw=2)
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title(f'{prefix.capitalize()} - ROC Curve')
+    plt.legend(loc="lower right")
+    plt.grid(True)
+    
+    # Plot PR
+    plt.subplot(1, 2, 2)
+    for m, name, color in zip([metrics1, metrics2], [m1_name, m2_name], ['c', 'y']):
+        if m is not None and 'y_prob' in m and 'y_true' in m:
+            precision, recall, _ = precision_recall_curve(m['y_true'], m['y_prob'])
+            pr_auc = average_precision_score(m['y_true'], m['y_prob'])
+            plt.plot(recall, precision, color=color, lw=2, label=f'{name} (PR AUC = {pr_auc:.3f})')
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title(f'{prefix.capitalize()} - Precision-Recall Curve')
+    plt.legend(loc="lower left")
+    plt.grid(True)
+    
+    plt.tight_layout()
+    if output_dir:
+        plt.savefig(os.path.join(output_dir, f'{prefix}_roc_pr_curves.png'))
+    plt.show()
+
+def plot_roc_pr_curves_3(metrics1, metrics2, metrics3, m1_name='XGBoost', m2_name='NN', m3_name='LSTM', output_dir=None, prefix=''):
+    """
+    Plots ROC and PR Curves for three models.
+    """
+    plt.figure(figsize=(14, 6))
+    
+    # Plot ROC
+    plt.subplot(1, 2, 1)
+    for m, name, color in zip([metrics1, metrics2, metrics3], [m1_name, m2_name, m3_name], ['c', 'y', 'm']):
+        if m is not None and 'y_prob' in m and 'y_true' in m:
+            fpr, tpr, _ = roc_curve(m['y_true'], m['y_prob'])
+            roc_auc = auc(fpr, tpr)
+            plt.plot(fpr, tpr, color=color, lw=2, label=f'{name} (AUC = {roc_auc:.3f})')
+    plt.plot([0, 1], [0, 1], 'k--', lw=2)
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title(f'{prefix.capitalize()} - ROC Curve')
+    plt.legend(loc="lower right")
+    plt.grid(True)
+    
+    # Plot PR
+    plt.subplot(1, 2, 2)
+    for m, name, color in zip([metrics1, metrics2, metrics3], [m1_name, m2_name, m3_name], ['c', 'y', 'm']):
+        if m is not None and 'y_prob' in m and 'y_true' in m:
+            precision, recall, _ = precision_recall_curve(m['y_true'], m['y_prob'])
+            pr_auc = average_precision_score(m['y_true'], m['y_prob'])
+            plt.plot(recall, precision, color=color, lw=2, label=f'{name} (PR AUC = {pr_auc:.3f})')
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title(f'{prefix.capitalize()} - Precision-Recall Curve')
+    plt.legend(loc="lower left")
+    plt.grid(True)
+    
+    plt.tight_layout()
+    if output_dir:
+        plt.savefig(os.path.join(output_dir, f'{prefix}_roc_pr_curves_3models.png'))
     plt.show()

@@ -25,22 +25,28 @@ def evaluate_model(model, X_test, y_test, threshold=0.5):
     if hasattr(model, "predict_proba"):
         probs = model.predict_proba(X_test)
         if probs.shape[1] > 1:
-            preds = (probs[:, 1] >= threshold).astype(int)
+            y_prob = probs[:, 1]
+            preds = (y_prob >= threshold).astype(int)
         else:
-            preds = (probs >= threshold).astype(int)
+            y_prob = probs[:, 0]
+            preds = (y_prob >= threshold).astype(int)
     else:
         preds_raw = model.predict(X_test)
         # If it's a Keras model, it returns probabilities of shape (samples, 1)
         if len(preds_raw.shape) == 2 and preds_raw.shape[1] == 1:
-            preds = (preds_raw[:, 0] >= threshold).astype(int)
+            y_prob = preds_raw[:, 0]
+            preds = (y_prob >= threshold).astype(int)
         else:
+            y_prob = preds_raw
             preds = preds_raw
     metrics = {
         'accuracy': accuracy_score(y_test, preds),
         'precision': precision_score(y_test, preds, zero_division=0),
         'recall': recall_score(y_test, preds, zero_division=0),
         'f1': f1_score(y_test, preds, zero_division=0),
-        'cm': confusion_matrix(y_test, preds, labels=[0, 1])
+        'cm': confusion_matrix(y_test, preds, labels=[0, 1]),
+        'y_true': np.array(y_test),
+        'y_prob': np.array(y_prob)
     }
     return metrics
 
@@ -56,23 +62,38 @@ def train_lstm(X_train_seq, y_train, params=None):
     epochs = params.get('epochs', 15) if params else 15
     batch_size = params.get('batch_size', 128) if params else 128
     
+    import numpy as np
+    import tensorflow as tf
+    
+    num_neg = np.sum(y_train == 0)
+    num_pos = np.sum(y_train == 1)
+    
+    # MAGIC TRICK FOR IMBALANCED DL: Set initial bias so the model doesn't panic in epoch 1
+    if num_pos > 0:
+        initial_bias = np.log([num_pos / num_neg])
+        output_bias = tf.keras.initializers.Constant(initial_bias)
+    else:
+        output_bias = 'zeros'
+        
     model = Sequential()
     model.add(LSTM(32, input_shape=(X_train_seq.shape[1], X_train_seq.shape[2]), return_sequences=False))
     model.add(Dropout(0.2))
     model.add(Dense(16, activation='relu'))
-    model.add(Dense(1, activation='sigmoid'))
+    model.add(Dense(1, activation='sigmoid', bias_initializer=output_bias))
     
-    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    # Use a slightly lower learning rate
+    optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
+    model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
     
     es = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
     
-    # Calculate class weights
-    import numpy as np
-    num_neg = np.sum(y_train == 0)
-    num_pos = np.sum(y_train == 1)
+    # Calculate class weights safely
     if num_pos > 0:
-        weight_0 = 1.0
-        weight_1 = num_neg / num_pos
+        total = num_neg + num_pos
+        weight_0 = (1 / num_neg) * (total / 2.0)
+        weight_1 = (1 / num_pos) * (total / 2.0)
+        # Cap weight_1 to avoid exploding gradients
+        weight_1 = min(weight_1, 50.0) 
         class_weight = {0: weight_0, 1: weight_1}
     else:
         class_weight = None

@@ -15,7 +15,7 @@ from src.data_loader import load_config, load_and_split_data
 from src.preprocessor import clean_data
 from src.features import engineer_features
 from src.models import train_xgboost, train_nn, evaluate_model, train_lstm
-from src.utils import plot_feature_importance, plot_metrics, plot_model_comparison_3
+from src.utils import plot_feature_importance, plot_metrics, plot_model_comparison_3, plot_roc_pr_curves_3
 
 def extract_single_window_all(i, delays, packet_loss, N, X, global_max):
     # Extract traditional tabular features for XGBoost and NN
@@ -144,13 +144,20 @@ def main():
         X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train_df), columns=X_train_df.columns)
         X_test_scaled = pd.DataFrame(scaler.transform(X_test_df), columns=X_test_df.columns)
         
-        print(f"  [*] Scaling Sequential data for LSTM...")
-        # Simple scale for Delay to be around [0, 1]. Packet loss is already 0 or 1.
-        global_max_delay = max(X_train_seq[:,:,0].max(), 1.0)
+        print(f"  [*] Applying StandardScaler for Sequential data (LSTM)...")
+        # We only scale the delay feature (index 0), packet_loss (index 1) remains binary.
+        seq_scaler = StandardScaler()
+        
+        # Flatten the delays to fit the scaler
+        train_delays_flat = X_train_seq[:,:,0].reshape(-1, 1)
+        seq_scaler.fit(train_delays_flat)
+        
         X_train_seq_scaled = np.copy(X_train_seq)
-        X_train_seq_scaled[:,:,0] = X_train_seq_scaled[:,:,0] / global_max_delay
+        X_train_seq_scaled[:,:,0] = seq_scaler.transform(train_delays_flat).reshape(X_train_seq.shape[0], X_train_seq.shape[1])
+        
+        test_delays_flat = X_test_seq[:,:,0].reshape(-1, 1)
         X_test_seq_scaled = np.copy(X_test_seq)
-        X_test_seq_scaled[:,:,0] = X_test_seq_scaled[:,:,0] / global_max_delay
+        X_test_seq_scaled[:,:,0] = seq_scaler.transform(test_delays_flat).reshape(X_test_seq.shape[0], X_test_seq.shape[1])
         
         # FIXING THE CLASS IMBALANCE
         num_neg = (y_train == 0).sum()
@@ -198,6 +205,9 @@ def main():
             plot_model_comparison_3(xgb_metrics, nn_metrics, lstm_metrics, 
                                     m1_name='XGBoost', m2_name='MLP_NN', m3_name='LSTM', 
                                     output_dir=output_dir, prefix=tunnel)
+            plot_roc_pr_curves_3(xgb_metrics, nn_metrics, lstm_metrics, 
+                                 m1_name='XGBoost', m2_name='MLP_NN', m3_name='LSTM', 
+                                 output_dir=output_dir, prefix=tunnel)
         else:
             print(f'\n  [*] Skipping 3-Way plot due to LSTM error.')
 

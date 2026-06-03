@@ -10,7 +10,7 @@ from src.data_loader import load_config, load_and_split_data
 from src.preprocessor import clean_data
 from src.features import engineer_features
 from src.models import train_xgboost, train_nn, evaluate_model
-from src.utils import plot_feature_importance, plot_metrics, plot_model_comparison
+from src.utils import plot_feature_importance, plot_metrics, plot_model_comparison, plot_roc_pr_curves_2
 
 def extract_single_window(i, delays, packet_loss, N, X, global_max):
     lookback_delays = delays[i : i+N]
@@ -186,6 +186,7 @@ def main():
         
         print(f'\n  [*] Generating Comparison Plots ({tunnel})...')
         plot_model_comparison(xgb_metrics, nn_metrics, model1_name='XGBoost', model2_name='NN', output_dir=output_dir, prefix=tunnel)
+        plot_roc_pr_curves_2(xgb_metrics, nn_metrics, m1_name='XGBoost', m2_name='NN', output_dir=output_dir, prefix=tunnel)
 
     print(f'\n[*] Pipeline execution completed! All plots and metrics saved in: {output_dir}')
 
