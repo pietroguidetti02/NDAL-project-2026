@@ -24,7 +24,10 @@ def extract_single_window_all(i, delays, packet_loss, N, X, global_max):
     feats = engineer_features(lookback_delays, lookback_losses, global_max_delay=global_max)
     
     # Extract raw sequential time-series for LSTM
-    seq = np.column_stack((lookback_delays, lookback_losses))
+    # We MUST handle NaNs here (losses) just like we do in tabular features
+    # otherwise the LSTM will fail to learn.
+    seq_delays = np.nan_to_num(lookback_delays, nan=global_max)
+    seq = np.column_stack((seq_delays, lookback_losses))
     
     # Label Extraction
     pred_losses = packet_loss[i+N : i+N+X]

@@ -216,12 +216,48 @@ def plot_model_comparison_3(metrics1, metrics2, metrics3, m1_name='XGBoost', m2_
     plt.bar(x, m2_global, width=w, edgecolor='black', color='y', align='center', hatch='---', label=m2_name)
     plt.bar(x + w, m3_global, width=w, edgecolor='black', color='m', align='center', hatch='\\\\\\', label=m3_name)
     plt.xticks(x, ["Accuracy", "Precision", "Recall", "F1-Score"])
-    plt.title(f'{prefix.capitalize()} - Model Comparison')
+    plt.title(f'{prefix.capitalize()} - Model Comparison (Global)')
     plt.ylabel('Score')
     plt.ylim([0.0, 1.05])
-    plt.grid(True, axis='y')
+    plt.grid(True, axis='y', alpha=0.3)
     plt.legend()
     if output_dir: plt.savefig(os.path.join(output_dir, f'{prefix}_comparison_global_3models.png'))
+    plt.show()
+
+    # 2) precision per class
+    plt.figure(figsize=(8, 6))
+    plt.bar(x2 - w, p_m1, width=w, edgecolor='black', color='c', align='center', hatch='///', label=m1_name)
+    plt.bar(x2, p_m2, width=w, edgecolor='black', color='y', align='center', hatch='---', label=m2_name)
+    plt.bar(x2 + w, p_m3, width=w, edgecolor='black', color='m', align='center', hatch='\\\\\\', label=m3_name)
+    plt.plot(x2, [metrics1.get('precision',0)]*2, color='c', linestyle='dashed')
+    plt.plot(x2, [metrics2.get('precision',0)]*2, color='y', linestyle='dashed')
+    plt.plot(x2, [metrics3.get('precision',0)]*2, color='m', linestyle='dashed')
+    plt.xticks(x2, label_names)
+    plt.title(f'{prefix.capitalize()} - Precision per class')
+    plt.xlabel('Class')
+    plt.ylabel('Precision')
+    plt.ylim([0.0, 1.05])
+    plt.legend()
+    plt.grid(True, axis='y', alpha=0.3)
+    if output_dir: plt.savefig(os.path.join(output_dir, f'{prefix}_comparison_precision_3models.png'))
+    plt.show()
+
+    # 3) recall per class
+    plt.figure(figsize=(8, 6))
+    plt.bar(x2 - w, r_m1, width=w, edgecolor='black', color='c', align='center', hatch='///', label=m1_name)
+    plt.bar(x2, r_m2, width=w, edgecolor='black', color='y', align='center', hatch='---', label=m2_name)
+    plt.bar(x2 + w, r_m3, width=w, edgecolor='black', color='m', align='center', hatch='\\\\\\', label=m3_name)
+    plt.plot(x2, [metrics1.get('recall',0)]*2, color='c', linestyle='dashed')
+    plt.plot(x2, [metrics2.get('recall',0)]*2, color='y', linestyle='dashed')
+    plt.plot(x2, [metrics3.get('recall',0)]*2, color='m', linestyle='dashed')
+    plt.xticks(x2, label_names)
+    plt.title(f'{prefix.capitalize()} - Recall per class')
+    plt.xlabel('Class')
+    plt.ylabel('Recall')
+    plt.ylim([0.0, 1.05])
+    plt.legend()
+    plt.grid(True, axis='y', alpha=0.3)
+    if output_dir: plt.savefig(os.path.join(output_dir, f'{prefix}_comparison_recall_3models.png'))
     plt.show()
 
     # 4) f1-score per class
@@ -235,7 +271,7 @@ def plot_model_comparison_3(metrics1, metrics2, metrics3, m1_name='XGBoost', m2_
     plt.ylabel('F1-score')
     plt.ylim([0.0, 1.05])
     plt.legend()
-    plt.grid(True, axis='y')
+    plt.grid(True, axis='y', alpha=0.3)
     if output_dir: plt.savefig(os.path.join(output_dir, f'{prefix}_comparison_f1_3models.png'))
     plt.show()
 
@@ -279,36 +315,53 @@ def plot_roc_pr_curves_2(metrics1, metrics2, m1_name='XGBoost', m2_name='NN', ou
 
 def plot_roc_pr_curves_3(metrics1, metrics2, metrics3, m1_name='XGBoost', m2_name='NN', m3_name='LSTM', output_dir=None, prefix=''):
     """
-    Plots ROC and PR Curves for three models.
+    Plots ROC and PR Curves for three models, highlighting the chosen optimal point.
     """
-    plt.figure(figsize=(14, 6))
+    plt.figure(figsize=(16, 7))
     
-    # Plot ROC
+    # colors and names
+    all_metrics = [metrics1, metrics2, metrics3]
+    names = [m1_name, m2_name, m3_name]
+    colors = ['c', 'y', 'm']
+
+    # 1. ROC CURVE
     plt.subplot(1, 2, 1)
-    for m, name, color in zip([metrics1, metrics2, metrics3], [m1_name, m2_name, m3_name], ['c', 'y', 'm']):
+    for m, name, color in zip(all_metrics, names, colors):
         if m is not None and 'y_prob' in m and 'y_true' in m:
-            fpr, tpr, _ = roc_curve(m['y_true'], m['y_prob'])
+            fpr, tpr, thresholds = roc_curve(m['y_true'], m['y_prob'])
             roc_auc = auc(fpr, tpr)
             plt.plot(fpr, tpr, color=color, lw=2, label=f'{name} (AUC = {roc_auc:.3f})')
+            
+            # Mark the point corresponding to the optimal_threshold
+            opt_t = m.get('optimal_threshold', 0.5)
+            # Find closest threshold index
+            idx = np.argmin(np.abs(thresholds - opt_t))
+            plt.plot(fpr[idx], tpr[idx], 'o', color=color, markersize=8, markeredgecolor='black')
+            
     plt.plot([0, 1], [0, 1], 'k--', lw=2)
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
-    plt.title(f'{prefix.capitalize()} - ROC Curve')
+    plt.title(f'{prefix.capitalize()} - ROC Curve (dots = chosen threshold)')
     plt.legend(loc="lower right")
-    plt.grid(True)
+    plt.grid(True, alpha=0.3)
     
-    # Plot PR
+    # 2. PRECISION-RECALL CURVE
     plt.subplot(1, 2, 2)
-    for m, name, color in zip([metrics1, metrics2, metrics3], [m1_name, m2_name, m3_name], ['c', 'y', 'm']):
+    for m, name, color in zip(all_metrics, names, colors):
         if m is not None and 'y_prob' in m and 'y_true' in m:
-            precision, recall, _ = precision_recall_curve(m['y_true'], m['y_prob'])
+            precision, recall, thresholds = precision_recall_curve(m['y_true'], m['y_prob'])
             pr_auc = average_precision_score(m['y_true'], m['y_prob'])
-            plt.plot(recall, precision, color=color, lw=2, label=f'{name} (PR AUC = {pr_auc:.3f})')
+            plt.plot(recall, precision, color=color, lw=2, label=f'{name} (F1 Max = {m.get("f1",0):.3f})')
+            
+            # The chosen metrics already correspond to the max F1 point we calculated
+            # Let's find it on the curve
+            plt.plot(m.get('recall', 0), m.get('precision', 0), 'o', color=color, markersize=8, markeredgecolor='black')
+
     plt.xlabel('Recall')
     plt.ylabel('Precision')
-    plt.title(f'{prefix.capitalize()} - Precision-Recall Curve')
-    plt.legend(loc="lower left")
-    plt.grid(True)
+    plt.title(f'{prefix.capitalize()} - PR Curve (dots = chosen threshold)')
+    plt.legend(loc="upper right")
+    plt.grid(True, alpha=0.3)
     
     plt.tight_layout()
     if output_dir:
