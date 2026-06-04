@@ -4,10 +4,14 @@ import numpy as np
 import os
 import sys
 import datetime
+import time
 from sklearn.preprocessing import StandardScaler
 from joblib import Parallel, delayed
 from imblearn.over_sampling import SMOTE
 import yaml
+import json
+import io
+from contextlib import redirect_stdout
 
 # To ensure the src module is found
 sys.path.append(os.getcwd())
@@ -17,22 +21,6 @@ from src.preprocessor import clean_data
 from src.features import engineer_features
 from src.models import train_xgboost, train_nn, evaluate_model, train_lstm, optimize_threshold_cv
 from src.utils import plot_feature_importance, plot_metrics, plot_model_comparison_3, plot_roc_pr_curves_3
-
-class Logger(object):
-    def __init__(self, filename):
-        self.terminal = sys.stdout
-        self.log = open(filename, "w")
-
-    def write(self, message):
-        self.terminal.write(message)
-        self.log.write(message)
-        self.log.flush()
-
-    def flush(self):
-        # this flush method is needed for python 3 compatibility.
-        # this handles the flush command by doing nothing.
-        # you might want to specify some extra behavior here.
-        pass
 
 def extract_single_window_all(i, delays, packet_loss, N, X, global_max):
     # Extract traditional tabular features for XGBoost and NN
@@ -99,27 +87,48 @@ def run_single_experiment(N, X, config, base_output_dir, train_dfs_dict, test_df
     exp_dir = os.path.join(base_output_dir, f"N_{N}_X_{X}")
     os.makedirs(exp_dir, exist_ok=True)
     
-    print(f"\n[Run N={N}, X={X}] Starting. Results will be saved in: {exp_dir}")
+    log_file_path = os.path.join(exp_dir, f"log_N_{N}_X_{X}.txt")
+    start_time = time.time()
+    
+    def log_msg(msg, to_terminal=False):
+        if not msg: return
+        timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        elapsed = time.time() - start_time
+        elapsed_str = str(datetime.timedelta(seconds=int(elapsed)))
+        
+        lines = msg.split('\n')
+        formatted_lines = [f"[{timestamp_str}] [T+{elapsed_str}] {line}" for line in lines if line.strip()]
+        formatted_msg = '\n'.join(formatted_lines)
+        
+        if not formatted_msg: return
+        
+        with open(log_file_path, "a") as f:
+            f.write(formatted_msg + "\n")
+            
+        if to_terminal:
+            print(formatted_msg, flush=True)
+
+    log_msg(f"[Run N={N}, X={X}] Starting. Results will be saved in: {exp_dir}", to_terminal=True)
     
     tunnel_types = config.get('tunnel_types', ['mobile', 'fiber'])
     
     for tunnel in tunnel_types:
-        print(f"\n  [N={N}, X={X}] === Processing Domain: {tunnel.upper()} ===")
+        log_msg(f"  [N={N}, X={X}] === Processing Domain: {tunnel.upper()} ===")
         train_dfs = train_dfs_dict.get(tunnel, [])
         test_dfs = test_dfs_dict.get(tunnel, [])
         
         if not train_dfs or not test_dfs:
-            print(f"  [N={N}, X={X}] [!] Warning: No data found for {tunnel}. Skipping...")
+            log_msg(f"  [N={N}, X={X}] [!] Warning: No data found for {tunnel}. Skipping...", to_terminal=True)
             continue
             
         # PHASE 1 & 2: Data Processing
-        print(f"  [N={N}, X={X}] [*] PHASE 1: Processing TRAINING data for {tunnel}...")
+        log_msg(f"  [N={N}, X={X}] [*] PHASE 1: Processing TRAINING data for {tunnel}...")
         X_train_df, X_train_seq, y_train = process_dataset_all(train_dfs, N, X, n_jobs=1)
-        print(f"  [N={N}, X={X}] [*] PHASE 2: Processing TESTING data for {tunnel}...")
+        log_msg(f"  [N={N}, X={X}] [*] PHASE 2: Processing TESTING data for {tunnel}...")
         X_test_df, X_test_seq, y_test = process_dataset_all(test_dfs, N, X, n_jobs=1)
         
         if len(X_train_df) == 0 or len(X_test_df) == 0:
-            print(f"  [N={N}, X={X}] [!] Insufficient data for {tunnel}. Skipping...")
+            log_msg(f"  [N={N}, X={X}] [!] Insufficient data for {tunnel}. Skipping...", to_terminal=True)
             continue
             
         # FEATURE SELECTION
@@ -131,13 +140,13 @@ def run_single_experiment(N, X, config, base_output_dir, train_dfs_dict, test_df
             cols_to_drop = []
             
         if cols_to_drop:
-            print(f"  [N={N}, X={X}] [*] Dropping useless columns for {tunnel}: {cols_to_drop}")
+            log_msg(f"  [N={N}, X={X}] [*] Dropping useless columns for {tunnel}: {cols_to_drop}")
             cols_to_drop_actual = [c for c in cols_to_drop if c in X_train_df.columns]
             X_train_df = X_train_df.drop(columns=cols_to_drop_actual)
             X_test_df = X_test_df.drop(columns=cols_to_drop_actual)
             
         # SCALING
-        print(f"  [N={N}, X={X}] [*] Applying StandardScalers...")
+        log_msg(f"  [N={N}, X={X}] [*] Applying StandardScalers...")
         scaler = StandardScaler()
         X_train_scaled = pd.DataFrame(scaler.fit_transform(X_train_df), columns=X_train_df.columns)
         X_test_scaled = pd.DataFrame(scaler.transform(X_test_df), columns=X_test_df.columns)
@@ -155,10 +164,10 @@ def run_single_experiment(N, X, config, base_output_dir, train_dfs_dict, test_df
         # RESAMPLING
         num_neg = (y_train == 0).sum()
         num_pos = (y_train == 1).sum()
-        print(f"  [N={N}, X={X}] [*] Dataset Imbalance -> Negatives: {num_neg}, Positives (Losses): {num_pos}")
+        log_msg(f"  [N={N}, X={X}] [*] Dataset Imbalance -> Negatives: {num_neg}, Positives (Losses): {num_pos}")
         
         if num_pos > 5:
-            print(f"  [N={N}, X={X}] [*] Applying Hybrid Resampling (RandomUnderSampler + SMOTE)...")
+            log_msg(f"  [N={N}, X={X}] [*] Applying Hybrid Resampling (RandomUnderSampler + SMOTE)...")
             from imblearn.under_sampling import RandomUnderSampler
             target_neg = max(10000, num_pos)
             target_neg = min(target_neg, num_neg)
@@ -169,42 +178,81 @@ def run_single_experiment(N, X, config, base_output_dir, train_dfs_dict, test_df
         else:
             X_train_scaled_resampled, y_train_resampled = X_train_scaled, y_train
 
+        # Helper to export raw predictions and metrics for future replotting
+        def save_predictions(metrics, model_name):
+            if metrics:
+                pred_df = pd.DataFrame({
+                    'y_true': metrics['y_true'],
+                    'y_prob': metrics['y_prob']
+                })
+                pred_df.to_csv(os.path.join(exp_dir, f"{model_name}_predictions.csv"), index=False)
+                
+                metrics_to_save = {k: v for k, v in metrics.items() if k not in ['y_true', 'y_prob', 'cm']}
+                if 'cm' in metrics:
+                    metrics_to_save['cm'] = metrics['cm'].tolist()
+                with open(os.path.join(exp_dir, f"{model_name}_metrics_summary.json"), 'w') as f:
+                    json.dump(metrics_to_save, f, indent=4)
+
         # TRAINING MODELS
         # 1/3 XGBoost
-        print(f"  [N={N}, X={X}] [*] --- Training 1/3: XGBoost Model ({tunnel}) ---")
+        log_msg(f"  [N={N}, X={X}] [*] --- Training 1/3: XGBoost Model ({tunnel}) ---", to_terminal=True)
         import xgboost as xgb
         xgb_params = {'use_label_encoder': False, 'eval_metric': 'logloss', 'n_jobs': 1}
         xgb_base = xgb.XGBClassifier(**xgb_params)
-        xgb_thresh = optimize_threshold_cv(xgb_base, X_train_scaled_resampled, y_train_resampled, cv=3)
+        
+        with io.StringIO() as buf, redirect_stdout(buf):
+            xgb_thresh = optimize_threshold_cv(xgb_base, X_train_scaled_resampled, y_train_resampled, cv=3)
+            log_msg(buf.getvalue().strip())
+            
         xgb_model = train_xgboost(X_train_scaled_resampled, y_train_resampled, params=xgb_params)
-        xgb_metrics = evaluate_model(xgb_model, X_test_scaled, y_test, threshold=xgb_thresh)
+        
+        with io.StringIO() as buf, redirect_stdout(buf):
+            xgb_metrics = evaluate_model(xgb_model, X_test_scaled, y_test, threshold=xgb_thresh)
+            log_msg(buf.getvalue().strip())
+            
+        save_predictions(xgb_metrics, f'{tunnel}_XGBoost')
         plot_metrics(xgb_metrics, model_name=f'{tunnel}_XGBoost', output_dir=exp_dir)
-        # Adding feature importance as it's often expected even if not in LSTM script
         plot_feature_importance(xgb_model, output_dir=exp_dir)
+        log_msg(f"  [N={N}, X={X}] [*] --- Finished 1/3: XGBoost Model ({tunnel}) ---", to_terminal=True)
         
         # 2/3 LSTM
-        print(f"  [N={N}, X={X}] [*] --- Training 2/3: LSTM Model ({tunnel}) ---")
+        log_msg(f"  [N={N}, X={X}] [*] --- Training 2/3: LSTM Model ({tunnel}) ---", to_terminal=True)
         try:
             lstm_model = train_lstm(X_train_seq_scaled, y_train, params={'epochs': 15, 'batch_size': 256, 'verbose': 0})
-            lstm_metrics = evaluate_model(lstm_model, X_test_seq_scaled, y_test, threshold=0.5)
+            with io.StringIO() as buf, redirect_stdout(buf):
+                lstm_metrics = evaluate_model(lstm_model, X_test_seq_scaled, y_test, threshold=0.5)
+                log_msg(buf.getvalue().strip())
+                
+            save_predictions(lstm_metrics, f'{tunnel}_LSTM')
             plot_metrics(lstm_metrics, model_name=f'{tunnel}_LSTM', output_dir=exp_dir)
+            log_msg(f"  [N={N}, X={X}] [*] --- Finished 2/3: LSTM Model ({tunnel}) ---", to_terminal=True)
         except Exception as e:
-            print(f"  [N={N}, X={X}] [!] LSTM Error: {e}")
+            log_msg(f"  [N={N}, X={X}] [!] LSTM Error: {e}", to_terminal=True)
             lstm_metrics = None
             
         # 3/3 Neural Network (MLP)
-        print(f"  [N={N}, X={X}] [*] --- Training 3/3: Neural Network Model ({tunnel}) ---")
+        log_msg(f"  [N={N}, X={X}] [*] --- Training 3/3: Neural Network Model ({tunnel}) ---", to_terminal=True)
         from sklearn.neural_network import MLPClassifier
         nn_params = {'max_iter': 500, 'random_state': 42}
         nn_base = MLPClassifier(**nn_params)
-        nn_thresh = optimize_threshold_cv(nn_base, X_train_scaled_resampled, y_train_resampled, cv=3)
+        
+        with io.StringIO() as buf, redirect_stdout(buf):
+            nn_thresh = optimize_threshold_cv(nn_base, X_train_scaled_resampled, y_train_resampled, cv=3)
+            log_msg(buf.getvalue().strip())
+            
         nn_model = train_nn(X_train_scaled_resampled, y_train_resampled, params=nn_params)
-        nn_metrics = evaluate_model(nn_model, X_test_scaled, y_test, threshold=nn_thresh)
+        
+        with io.StringIO() as buf, redirect_stdout(buf):
+            nn_metrics = evaluate_model(nn_model, X_test_scaled, y_test, threshold=nn_thresh)
+            log_msg(buf.getvalue().strip())
+            
+        save_predictions(nn_metrics, f'{tunnel}_NN')
         plot_metrics(nn_metrics, model_name=f'{tunnel}_NN', output_dir=exp_dir)
+        log_msg(f"  [N={N}, X={X}] [*] --- Finished 3/3: Neural Network Model ({tunnel}) ---", to_terminal=True)
         
         # COMPARISON
         if lstm_metrics is not None:
-            print(f"  [N={N}, X={X}] [*] Generating 3-Way Comparison Plots ({tunnel})...")
+            log_msg(f"  [N={N}, X={X}] [*] Generating 3-Way Comparison Plots ({tunnel})...")
             plot_model_comparison_3(xgb_metrics, nn_metrics, lstm_metrics, 
                                     m1_name='XGBoost', m2_name='MLP_NN', m3_name='LSTM', 
                                     output_dir=exp_dir, prefix=tunnel)
@@ -212,7 +260,7 @@ def run_single_experiment(N, X, config, base_output_dir, train_dfs_dict, test_df
                                  m1_name='XGBoost', m2_name='MLP_NN', m3_name='LSTM', 
                                  output_dir=exp_dir, prefix=tunnel)
             
-    print(f"[Run N={N}, X={X}] Completed.")
+    log_msg(f"[Run N={N}, X={X}] Completed.", to_terminal=True)
     return True
 
 def main():
@@ -221,8 +269,15 @@ def main():
     parser.add_argument('--max_cores', type=int, default=12, help='Maximum number of concurrent experiments')
     args = parser.parse_args()
     
+    start_time = time.time()
+    def print_main(msg):
+        timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        elapsed = time.time() - start_time
+        elapsed_str = str(datetime.timedelta(seconds=int(elapsed)))
+        print(f"[{timestamp_str}] [MAIN] [T+{elapsed_str}] {msg}", flush=True)
+
     if not os.path.exists(args.config):
-        print(f"Config file {args.config} not found.")
+        print_main(f"Config file {args.config} not found.")
         return
 
     with open(args.config, 'r') as f:
@@ -234,25 +289,18 @@ def main():
     # Generate valid (N, X) pairs where X < N
     combinations = [(n, x) for n in N_values for x in X_values if x < n]
     
-    print(f"[*] Starting Sweep with {len(combinations)} valid combinations.")
-    print(f"[*] Max concurrent experiments: {args.max_cores}")
+    print_main(f"[*] Starting Sweep with {len(combinations)} valid combinations.")
+    print_main(f"[*] Max concurrent experiments: {args.max_cores}")
     
     config_name = os.path.splitext(os.path.basename(args.config))[0]
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    base_output_dir = os.path.join("results", f"sweep_{config_name}_{timestamp}")
+    timestamp_fs = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    base_output_dir = os.path.join("results", f"sweep_{config_name}_{timestamp_fs}")
     os.makedirs(base_output_dir, exist_ok=True)
     
-    print(f"[*] Results will be saved in: {base_output_dir}")
+    print_main(f"[*] Results will be saved in: {base_output_dir}")
+    print_main(f"[*] Command: {' '.join(sys.argv)}")
     
-    # Setup logging to file
-    log_file_path = os.path.join(base_output_dir, "sweep_log.txt")
-    sys.stdout = Logger(log_file_path)
-    sys.stderr = sys.stdout
-    
-    print(f"[*] Logging started at {timestamp}")
-    print(f"[*] Command: {' '.join(sys.argv)}")
-    
-    print("[*] Loading raw data once...")
+    print_main("[*] Loading raw data once...")
     # We load raw data once and share it to save memory/time
     train_dfs_dict, test_dfs_dict = load_and_split_data(config)
     
@@ -262,8 +310,8 @@ def main():
         for n, x in combinations
     )
     
-    print(f"\n[*] All experiments in sweep completed! Total combinations: {len(combinations)}")
-    print(f"[*] Check {base_output_dir} for results.")
+    print_main(f"\n[*] All experiments in sweep completed! Total combinations: {len(combinations)}")
+    print_main(f"[*] Check {base_output_dir} for results.")
 
 if __name__ == '__main__':
     main()
