@@ -95,17 +95,28 @@ merging of dataset after parsing them from csv files.
 - [x] Address Class Imbalance via `scale_pos_weight` and **SMOTE** (Synthetic Minority Over-sampling Technique).
 
 ### Phase 4: Federated Learning Simulation
-- [ ] Define Local Client representing each directional CPE path/node.
-- [ ] Implement Central Controller logic to aggregate model updates:
-  - **Neural Network:** Perform Federated Averaging (FedAvg) on weights:
-    $$\theta_{global} = \sum_{k=1}^{K} \frac{n_k}{n} \theta_{local, k}$$
-  - **XGBoost:** Implement model ensembling/bagging (collecting trees from all local clients) or run federated training on neural network only and compare.
-- [ ] Train local models, perform central aggregation rounds, and redistribute weights.
-- [ ] Compare performance: **Global Federated Model** vs. **Individual Local Models** tested on local hold-out sets.
+- [ ] **Architecture Choice (Horizontal Federated Learning - HFL):** Our setup is a classic case of **Horizontal** (or sample-based) Federated Learning. 
+  - *Reasoning for Slides:* All participating local clients (CPEs) share the exact same **Feature Space** (the columns: delay, jitter, packet loss), but they possess entirely different **Sample Spaces** (the rows: traffic events from distinct geographical routes like A->B vs C->A). Because the Neural Networks across all nodes have identical input architectures, we can directly average their mathematical weights. (In contrast, Vertical FL is used when clients share the same samples but hold different features, which doesn't apply here).
+- [ ] **Decentralized Data Strategy:** Partition the dataset logically into completely isolated clients (e.g., Client A, Client B, Client C). Clients must *never* share raw CSV telemetry data to preserve bandwidth and privacy.
+- [ ] **Local Model Training:** Each client initializes a local clone of the Neural Network (MLP/LSTM) and trains it strictly on its own local data for a small number of epochs.
+- [ ] **Central Aggregation (FedAvg):** 
+  - Instead of data, clients send only their learned network weights (`model.get_weights()`) to the Central Server.
+  - The server averages the weights: $$\theta_{global} = \sum_{k=1}^{K} \frac{n_k}{n} \theta_{local, k}$$
+  - The server redistributes the Global Model back to all clients.
+  - *Note: XGBoost is generally excluded from this federated averaging process due to the mathematical complexity of merging decision trees. Focus FL solely on MLP/LSTM.*
+- [ ] **Performance Benchmarking:** Compare the **Federated Model** (which learns from all nodes without seeing their data) against the **Centralized Baseline** (our current script) and the **Strictly Local Models**.
 
-### Phase 5: Experimentation & Verification
-- [ ] Execute `run_experiments.py` over combinations of:
-  - $N \in \{15, 30, 60\}$ seconds
-  - $X \in \{5, 10, 20\}$ seconds
-- [ ] Produce comparative charts showing performance variation across different $(N, X)$ parameters.
+- Bonus (angelo): include in the results an experimentation to give a sense of real difference between time of computation of big centralized model, against the time that u put in calculating the decentralized con cpes and merging all informations toghether, assuming a fixed delay and penalty of ip transport and physical transport.
+so it is important always to measure the time needed to train a model. and we must redo simulations for big centralized model.
+It is needed to decide which data (smaller part) to use. not whole dataset.
+
+- Bonus2: ogni quanto è necessario mandare i pesi dalle macchine al controller centrale?
+
+
+### Phase 5: Advanced Experimentation & Verification
+- [ ] **Leave-One-Link-Out (LOLO) Spatial Test:** Train the model on 5 links (e.g., A->B, B->A, A->C, C->A, B->C) and test strictly on the 6th unseen link (e.g., C->B). Evaluates the model's zero-shot adaptability to newly installed routes.
+- [x] **Window Size Physics (N, X Tuning):** Execute `run_experiments.py` over extreme combinations:
+  - "Far-Sight" test: $N=60s$, $X=60s$. How far into the future can the model predict before the signal degrades?
+  - "Short-Sight" test: $N=5s$, $X=5s$. Is a 5-second history enough to predict an immediate anomaly?
+- [x] Produce comparative charts showing performance variation across different configurations.
 - [ ] Write a final report / walkthrough summarizing results, best parameters, and insights.

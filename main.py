@@ -114,9 +114,14 @@ def main():
         
         # --- FEATURE SELECTION based on analysis reports ---
         if tunnel == 'fiber':
-            cols_to_drop = ['mean', 'jitter', 'max', 'q95', 'ratio_recent_mean_to_global', 'spikes_over_q95']
+            cols_to_drop = ['mean', 'jitter', 
+                            'max', 'q95', 
+                            'ratio_recent_mean_to_global', 
+                            'spikes_over_q95']
         elif tunnel == 'mobile':
-            cols_to_drop = ['recent_jitter', 'recent_slope', 'ratio_recent_mean_to_global', 'spikes_over_q95']
+            cols_to_drop = ['recent_jitter', 'recent_slope', 
+                            'ratio_recent_mean_to_global', 
+                            'spikes_over_q95']
         else:
             cols_to_drop = []
             
