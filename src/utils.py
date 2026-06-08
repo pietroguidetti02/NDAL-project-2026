@@ -363,7 +363,82 @@ def plot_roc_pr_curves_3(metrics1, metrics2, metrics3, m1_name='XGBoost', m2_nam
     plt.legend(loc="upper right")
     plt.grid(True, alpha=0.3)
     
-    plt.tight_layout()
     if output_dir:
         plt.savefig(os.path.join(output_dir, f'{prefix}_roc_pr_curves_3models.png'))
     plt.show()
+
+def plot_inference_ecdf(results_df, x_thresholds=[1.0, 5.0, 10.0], output_dir=None):
+    """
+    Plots the ECDF (Empirical Cumulative Distribution Function) of inference times.
+    results_df should have columns: ['Model', 'N', 'InferenceTime_ms']
+    """
+    plt.figure(figsize=(12, 7))
+    
+    combinations = results_df[['Model', 'N']].drop_duplicates()
+    
+    for _, row in combinations.iterrows():
+        model = row['Model']
+        n = row['N']
+        mask = (results_df['Model'] == model) & (results_df['N'] == n)
+        times = results_df[mask]['InferenceTime_ms'].dropna().values
+        if len(times) == 0: continue
+        
+        # Sort times to build ECDF
+        x = np.sort(times) / 1000.0  # Convert to seconds
+        y = np.arange(1, len(x) + 1) / len(x)
+        
+        plt.plot(x, y, lw=2, label=f'{model} (N={n})')
+        
+    for thresh in x_thresholds:
+        plt.axvline(x=thresh, color='r', linestyle='--', alpha=0.7, label=f'Threshold X={thresh}s')
+        
+    plt.title('ECDF of Real-Time Inference Latency')
+    plt.xlabel('Inference Time (Seconds)')
+    plt.ylabel('Cumulative Probability')
+    
+    max_x = results_df['InferenceTime_ms'].max() / 1000.0
+    plt.xlim(0, min(15.0, max_x + 0.5))
+    
+    # Fix duplicate legend entries for thresholds
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    plt.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    if output_dir:
+        plt.savefig(os.path.join(output_dir, 'inference_ecdf.png'))
+    plt.show(block=False)
+    plt.pause(2)
+    plt.close()
+
+def plot_inference_boxplot(results_df, x_thresholds=[1.0, 5.0, 10.0], output_dir=None):
+    """
+    Plots a boxplot of inference times across different N sizes for each model.
+    """
+    import seaborn as sns
+    plt.figure(figsize=(12, 7))
+    
+    df_plot = results_df.copy()
+    df_plot['InferenceTime_s'] = df_plot['InferenceTime_ms'] / 1000.0
+    
+    sns.boxplot(data=df_plot, x='N', y='InferenceTime_s', hue='Model')
+    
+    for thresh in x_thresholds:
+        plt.axhline(y=thresh, color='r', linestyle='--', alpha=0.7, label=f'Threshold X={thresh}s')
+        
+    plt.title('Impact of Lookback Window (N) on Inference Latency')
+    plt.xlabel('Lookback Window Size (N)')
+    plt.ylabel('Inference Time (Seconds)')
+    
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    plt.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+    plt.grid(True, alpha=0.3, axis='y')
+    plt.tight_layout()
+    if output_dir:
+        plt.savefig(os.path.join(output_dir, 'inference_boxplot.png'))
+    plt.show(block=False)
+    plt.pause(2)
+    plt.close()

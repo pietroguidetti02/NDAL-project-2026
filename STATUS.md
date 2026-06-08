@@ -94,6 +94,9 @@ merging of dataset after parsing them from csv files.
 - [x] Evaluate performance using metrics: Accuracy, Precision, Recall, F1-score, MAE/MSE (if applicable), and Confusion Matrix.
 - [x] Address Class Imbalance via `scale_pos_weight` and **SMOTE** (Synthetic Minority Over-sampling Technique).
 
+- [ ] use best window, in order to measure time inference in our use case. create a new main python script that simulates behaviour of our usecase router in which after N samples we can perform the training (N=10,X=1) and to the predict after, in the X seconds. in order to see if this algorhtitm can be used in real time.
+
+
 ### Phase 4: Federated Learning Simulation
 - [ ] **Architecture Choice (Horizontal Federated Learning - HFL):** Our setup is a classic case of **Horizontal** (or sample-based) Federated Learning. 
   - *Reasoning for Slides:* All participating local clients (CPEs) share the exact same **Feature Space** (the columns: delay, jitter, packet loss), but they possess entirely different **Sample Spaces** (the rows: traffic events from distinct geographical routes like A->B vs C->A). Because the Neural Networks across all nodes have identical input architectures, we can directly average their mathematical weights. (In contrast, Vertical FL is used when clients share the same samples but hold different features, which doesn't apply here).
@@ -106,11 +109,12 @@ merging of dataset after parsing them from csv files.
   - *Note: XGBoost is generally excluded from this federated averaging process due to the mathematical complexity of merging decision trees. Focus FL solely on MLP/LSTM.*
 - [ ] **Performance Benchmarking:** Compare the **Federated Model** (which learns from all nodes without seeing their data) against the **Centralized Baseline** (our current script) and the **Strictly Local Models**.
 
-- Bonus (angelo): include in the results an experimentation to give a sense of real difference between time of computation of big centralized model, against the time that u put in calculating the decentralized con cpes and merging all informations toghether, assuming a fixed delay and penalty of ip transport and physical transport.
+- TODO: include in the results an experimentation to give a sense of real difference between time of computation of big centralized model, against the time that u put in calculating the decentralized con cpes and merging all informations toghether, assuming a fixed delay and penalty of ip transport and physical transport.
 so it is important always to measure the time needed to train a model. and we must redo simulations for big centralized model.
 It is needed to decide which data (smaller part) to use. not whole dataset.
+focus only on 4g data mobile
 
-- Bonus2: ogni quanto è necessario mandare i pesi dalle macchine al controller centrale?
+- Bonus: ogni quanto è necessario mandare i pesi dalle macchine al controller centrale?
 
 
 ### Phase 5: Advanced Experimentation & Verification
