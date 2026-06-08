@@ -7,6 +7,7 @@ import pandas as pd
 import argparse
 from sklearn.preprocessing import StandardScaler
 from joblib import Parallel, delayed
+import threading
 
 sys.path.append(os.getcwd())
 from src.preprocessor import clean_data
@@ -92,40 +93,57 @@ def run_realtime_simulation(file_path, n_sizes=[10, 15, 30, 60], X=5, num_simula
             lookback_delays = delays[i : i+N]
             lookback_losses = packet_loss[i : i+N]
             
+            results_this_iter = []
+
             # --- MISURAZIONE XGBOOST ---
-            start_xgb = time.perf_counter()
-            feats = engineer_features(lookback_delays, lookback_losses, global_max_delay=global_max)
-            # Dobbiamo assicurarci che l'ordine delle colonne sia identico, passo il dataframe con le stesse colonne
-            feats_df = pd.DataFrame([feats])[X_tab_df.columns]
-            f_scaled = tab_scaler.transform(feats_df)
-            _ = xgb_model.predict_proba(f_scaled)
-            end_xgb = time.perf_counter()
-            
-            all_results.append({'Model': 'XGBoost', 'N': N, 'InferenceTime_ms': (end_xgb - start_xgb) * 1000.0})
+            def run_xgb():
+                start_xgb = time.perf_counter()
+                feats = engineer_features(lookback_delays, lookback_losses, global_max_delay=global_max)
+                # Dobbiamo assicurarci che l'ordine delle colonne sia identico, passo il dataframe con le stesse colonne
+                feats_df = pd.DataFrame([feats])[X_tab_df.columns]
+                f_scaled = tab_scaler.transform(feats_df)
+                _ = xgb_model.predict_proba(f_scaled)
+                end_xgb = time.perf_counter()
+                results_this_iter.append({'Model': 'XGBoost', 'N': N, 'InferenceTime_ms': (end_xgb - start_xgb) * 1000.0})
             
             # --- MISURAZIONE MLP ---
-            start_nn = time.perf_counter()
-            # MLP usa le stesse features, ma nella realtà il router avrebbe già fatto `engineer_features`. 
-            # Per correttezza, se girano in parallelo sul router, ognuno fa la sua estrazione (o la condividono).
-            # Assumiamo che la condivisione delle features avvenga e cronometriamo solo l'inferenza per MLP.
-            # Se vogliamo essere cattivi cronometriamo anche l'estrazione:
-            feats_nn = engineer_features(lookback_delays, lookback_losses, global_max_delay=global_max)
-            f_nn_scaled = tab_scaler.transform(pd.DataFrame([feats_nn])[X_tab_df.columns])
-            _ = nn_model.predict_proba(f_nn_scaled)
-            end_nn = time.perf_counter()
-            
-            all_results.append({'Model': 'MLP_NN', 'N': N, 'InferenceTime_ms': (end_nn - start_nn) * 1000.0})
+            def run_nn():
+                start_nn = time.perf_counter()
+                # MLP usa le stesse features, ma nella realtà il router avrebbe già fatto `engineer_features`. 
+                # Per correttezza, se girano in parallelo sul router, ognuno fa la sua estrazione (o la condividono).
+                # Assumiamo che la condivisione delle features avvenga e cronometriamo solo l'inferenza per MLP.
+                # Se vogliamo essere cattivi cronometriamo anche l'estrazione:
+                feats_nn = engineer_features(lookback_delays, lookback_losses, global_max_delay=global_max)
+                f_nn_scaled = tab_scaler.transform(pd.DataFrame([feats_nn])[X_tab_df.columns])
+                _ = nn_model.predict_proba(f_nn_scaled)
+                end_nn = time.perf_counter()
+                results_this_iter.append({'Model': 'MLP_NN', 'N': N, 'InferenceTime_ms': (end_nn - start_nn) * 1000.0})
             
             # --- MISURAZIONE LSTM ---
-            if lstm_model is not None:
-                start_lstm = time.perf_counter()
-                seq_d = np.nan_to_num(lookback_delays, nan=global_max).reshape(-1, 1)
-                seq_d_scaled = seq_scaler.transform(seq_d)
-                seq_final = np.column_stack((seq_d_scaled, lookback_losses)).reshape(1, N, 2)
-                _ = lstm_model.predict(seq_final, verbose=0)
-                end_lstm = time.perf_counter()
-                
-                all_results.append({'Model': 'LSTM', 'N': N, 'InferenceTime_ms': (end_lstm - start_lstm) * 1000.0})
+            def run_lstm():
+                if lstm_model is not None:
+                    start_lstm = time.perf_counter()
+                    seq_d = np.nan_to_num(lookback_delays, nan=global_max).reshape(-1, 1)
+                    seq_d_scaled = seq_scaler.transform(seq_d)
+                    seq_final = np.column_stack((seq_d_scaled, lookback_losses)).reshape(1, N, 2)
+                    _ = lstm_model.predict(seq_final, verbose=0)
+                    end_lstm = time.perf_counter()
+                    results_this_iter.append({'Model': 'LSTM', 'N': N, 'InferenceTime_ms': (end_lstm - start_lstm) * 1000.0})
+
+            t_xgb = threading.Thread(target=run_xgb)
+            t_nn = threading.Thread(target=run_nn)
+            t_lstm = threading.Thread(target=run_lstm)
+
+            t_xgb.start()
+            t_nn.start()
+            t_lstm.start()
+
+            t_xgb.join()
+            t_nn.join()
+            t_lstm.join()
+
+            all_results.extend(results_this_iter)
+
 
     results_df = pd.DataFrame(all_results)
     
