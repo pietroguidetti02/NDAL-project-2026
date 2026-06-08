@@ -442,3 +442,58 @@ def plot_inference_boxplot(results_df, x_thresholds=[1.0, 5.0, 10.0], output_dir
     plt.show(block=False)
     plt.pause(2)
     plt.close()
+
+def plot_fl_training_times(timing_records, output_dir=None, prefix=''):
+    """
+    Generates a stacked bar plot showing compute time, idle time, and network delay 
+    for each client across federated learning rounds.
+    timing_records format: [{'Round': 1, 'CPE_A': 1.2, 'CPE_B': 1.5, 'CPE_C': 0.9, 'Network': 0.3}, ...]
+    """
+    import pandas as pd
+    
+    df = pd.DataFrame(timing_records)
+    rounds = df['Round'].values
+    network = df['Network'].values
+    
+    clients = [c for c in df.columns if c not in ['Round', 'Network']]
+    max_compute = df[clients].max(axis=1).values
+    
+    fig, ax = plt.subplots(figsize=(12, 6))
+    
+    x = np.arange(len(rounds))
+    width = 0.8 / len(clients)
+    
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c']
+    
+    for i, client in enumerate(clients):
+        compute_times = df[client].values
+        idle_times = max_compute - compute_times
+        
+        pos = x - 0.4 + (i + 0.5) * width
+        
+        # Plot actual Compute Time
+        ax.bar(pos, compute_times, width, color=colors[i % len(colors)], edgecolor='black', label=f'{client} Compute')
+        
+        # Plot Idle Time (waiting for the slowest client)
+        ax.bar(pos, idle_times, width, bottom=compute_times, color='lightgray', hatch='////', edgecolor='black', label='Idle Time (Wait)' if i==0 else "")
+        
+        # Plot Network Penalty on top of the max compute barrier
+        ax.bar(pos, network, width, bottom=max_compute, color='#d62728', alpha=0.8, edgecolor='black', label='Network Delay' if i==0 else "")
+
+    ax.set_xticks(x)
+    ax.set_xticklabels([f'Round {r}' for r in rounds])
+    ax.set_ylabel('Tempo (Secondi)')
+    ax.set_title(f'[{prefix}] Federated Learning - Ripartizione Tempi per Round (Il problema del "Collo di Bottiglia")')
+    
+    # Rimuovi i duplicati dalla legenda
+    handles, labels = ax.get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    ax.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+    plt.grid(True, axis='y', linestyle='--', alpha=0.5)
+    plt.tight_layout()
+    if output_dir:
+        plt.savefig(os.path.join(output_dir, f'{prefix}_fl_times_stacked.png'))
+    plt.show(block=False)
+    plt.pause(2)
+    plt.close()
