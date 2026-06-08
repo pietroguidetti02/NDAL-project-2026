@@ -85,10 +85,24 @@ def run_realtime_simulation(file_path, n_sizes=[10, 15, 30, 60], X=5, num_simula
             lstm_model = None
             
         # 3. IL VERO TEST DI INFERENZA (Cronometrato)
-        print(f"  -> Inizio simulazione LIVE su {num_simulations} pacchetti...")
-        
         start_idx = train_samples + 100
-        for i in range(start_idx, start_idx + num_simulations):
+        
+        # Calcoliamo il numero massimo di step possibili senza uscire dalla fine dell'array
+        max_possible_sims = len(delays) - start_idx - N + 1
+        
+        # Gestione di 'infinity' o di numeri che superano la lunghezza del file
+        if num_simulations == 'infinity' or num_simulations == float('inf'):
+            actual_sims = max_possible_sims
+        else:
+            actual_sims = min(int(num_simulations), max_possible_sims)
+            
+        if actual_sims <= 0:
+            print(f"  [!] Attenzione: dati insufficienti per avviare la simulazione con N={N}.")
+            continue
+
+        print(f"  -> Inizio simulazione LIVE su {actual_sims} pacchetti...")
+        
+        for i in range(start_idx, start_idx + actual_sims):
             # Simuliamo l'arrivo dei dati al router in questo esatto millisecondo
             lookback_delays = delays[i : i+N]
             lookback_losses = packet_loss[i : i+N]
@@ -159,8 +173,8 @@ def run_realtime_simulation(file_path, n_sizes=[10, 15, 30, 60], X=5, num_simula
     
     print("\n[*] Generazione Grafici...")
     # Plot con linee a 0.5s, 1s, 5s (in base alle esigenze di routing)
-    plot_inference_ecdf(results_df, x_thresholds=[0.5, 1.0, 5.0], output_dir=output_dir)
-    plot_inference_boxplot(results_df, x_thresholds=[0.5, 1.0, 5.0], output_dir=output_dir)
+    plot_inference_ecdf(results_df, x_thresholds=[0.5], output_dir=output_dir)
+    plot_inference_boxplot(results_df, x_thresholds=[0.5], output_dir=output_dir)
     
     print(f"[*] Tutti i grafici salvati in: {output_dir}")
 
@@ -175,6 +189,6 @@ if __name__ == '__main__':
     test_file_to_use = r"dataset/first_capture_window/cpe_a-cpe_b-mobile.csv"
             
     if test_file_to_use and os.path.exists(test_file_to_use):
-        run_realtime_simulation(test_file_to_use, n_sizes=[10, 15, 30, 60], num_simulations=300, output_dir=output_dir)
+        run_realtime_simulation(test_file_to_use, n_sizes=[10, 15, 30, 60], X=1, num_simulations='infinity', output_dir=output_dir)
     else:
         print(f"[!] Errore: File dataset '{test_file_to_use}' non trovato per la simulazione.")
