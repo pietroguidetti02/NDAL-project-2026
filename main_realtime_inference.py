@@ -164,8 +164,8 @@ def run_realtime_simulation(file_path, n_sizes=[10, 15, 30, 60], X=5, num_simula
         print(summary)
         
         print("\n[*] Generazione Grafici...")
-        plot_inference_ecdf(results_df, x_thresholds=[0.5], output_dir=output_dir)
-        plot_inference_boxplot(results_df, x_thresholds=[0.5], output_dir=output_dir)
+        plot_inference_ecdf(results_df, x_thresholds=None, output_dir=output_dir)
+        plot_inference_boxplot(results_df, x_thresholds=None, output_dir=output_dir)
         print(f"[*] Tutti i grafici salvati in: {output_dir}")
     else:
         print("[!] Nessun risultato raccolto.")
@@ -180,7 +180,7 @@ if __name__ == '__main__':
     os.makedirs(output_dir, exist_ok=True)
     
     # File per test
-    test_file_to_use = r"dataset/first_capture_window/cpe_a-cpe_b-mobile.csv"
+    test_file_to_use = r"dataset/second_capture_window/cpe_a-cpe_b-mobile.csv"
             
     if test_file_to_use and os.path.exists(test_file_to_use):
         run_realtime_simulation(test_file_to_use, n_sizes=[10, 15, 30, 60], X=1, num_simulations='infinity', output_dir=output_dir)

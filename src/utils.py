@@ -389,15 +389,18 @@ def plot_inference_ecdf(results_df, x_thresholds=[1.0, 5.0, 10.0], output_dir=No
         
         plt.plot(x, y, lw=2, label=f'{model} (N={n})')
         
-    for thresh in x_thresholds:
-        plt.axvline(x=thresh, color='r', linestyle='--', alpha=0.7, label=f'Threshold X={thresh}s')
+    if x_thresholds is not None:
+        for thresh in x_thresholds:
+            plt.axvline(x=thresh, color='r', linestyle='--', alpha=0.7, label=f'Threshold X={thresh}s')
         
     plt.title('ECDF of Real-Time Inference Latency')
     plt.xlabel('Inference Time (Seconds)')
     plt.ylabel('Cumulative Probability')
     
     max_x = results_df['InferenceTime_ms'].max() / 1000.0
-    plt.xlim(0, min(15.0, max_x + 0.5))
+
+    # Aggiunge un 10% di margine a destra per una visualizzazione ottimale
+    plt.xlim(0, max_x * 1.1)
     
     # Fix duplicate legend entries for thresholds
     handles, labels = plt.gca().get_legend_handles_labels()
@@ -424,8 +427,9 @@ def plot_inference_boxplot(results_df, x_thresholds=[1.0, 5.0, 10.0], output_dir
     
     sns.boxplot(data=df_plot, x='N', y='InferenceTime_s', hue='Model')
     
-    for thresh in x_thresholds:
-        plt.axhline(y=thresh, color='r', linestyle='--', alpha=0.7, label=f'Threshold X={thresh}s')
+    if x_thresholds is not None:
+        for thresh in x_thresholds:
+            plt.axhline(y=thresh, color='r', linestyle='--', alpha=0.7, label=f'Threshold X={thresh}s')
         
     plt.title('Impact of Lookback Window (N) on Inference Latency')
     plt.xlabel('Lookback Window Size (N)')
