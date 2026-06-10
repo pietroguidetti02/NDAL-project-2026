@@ -57,7 +57,8 @@ def run_federated():
         return
 
     print("\n[*] Partizionamento Dati sui 3 Router (Client A, B, C)...")
-    splits = np.array_split(train_dfs, 3)
+    indices = np.array_split(range(len(train_dfs)), 3)
+    splits = [[train_dfs[i] for i in idx] for idx in indices]
     clients_dfs = {'CPE_A': splits[0], 'CPE_B': splits[1], 'CPE_C': splits[2]}
     
     clients_data = {}
