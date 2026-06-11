@@ -1,0 +1,28 @@
+# config/exp_federated.yaml
+N_values: [10, 15, 20, 30, 60]  # Lookback window (seconds)
+X: 1   # Prediction window (seconds)
+
+# Defining train/test split percentages for capture windows
+# Format: [percentage_window_1, percentage_window_2]
+# Using ALL CPE pairs and BOTH measurement campaigns to maximize the dataset!
+# BEST PRACTICE FOR TIME SERIES: Train on one complete session (Window 1), Test on another (Window 2)
+#for time split, we train on the first 100% of the data and test on the last 0% (i.e., future data)
+train_test_split:
+  A->B:
+    train: [0, 100]
+    test: [100, 0]
+  A->C:
+    train: [0, 100]
+    test: [100, 0]
+  B->A:
+    train: [0, 100]
+    test: [100, 0]
+  B->C:
+    train: [0, 100]
+    test: [100, 0]
+  C->A:
+    train: [0, 100]
+    test: [100, 0]
+  C->B:
+    train: [0, 100]
+    test: [100, 0]
