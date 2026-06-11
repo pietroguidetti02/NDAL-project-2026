@@ -39,8 +39,12 @@ def run_federated():
     parser.add_argument('--n_sizes', type=int, nargs='+', default=[15, 30, 60], help='List of Lookback Windows (N) to sweep')
     args = parser.parse_args()
 
+    #name of yaml to be included in the folder name (without the entire path, only the exp name, also without the root folders)
+    from pathlib import Path
+    yaml_name = Path(args.config).stem
+
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = os.path.join("results", f"exp_federated_{timestamp}")
+    output_dir = os.path.join("results", f"exp_federated_[{yaml_name}]_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
     
     print(f"=== Starting FEDERATED LEARNING Simulation ===")
