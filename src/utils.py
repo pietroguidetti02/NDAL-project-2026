@@ -496,10 +496,10 @@ def plot_fl_training_times(timing_records, output_dir=None, prefix=''):
 
     ax.set_xticks(x)
     ax.set_xticklabels([f'Round {r}' for r in rounds])
-    ax.set_ylabel('Tempo (Secondi)')
-    ax.set_title(f'[{prefix}] Federated Learning - Ripartizione Tempi per Round (Il problema del "Collo di Bottiglia")')
+    ax.set_ylabel('Time (Seconds)')
+    ax.set_title(f'[{prefix}] Federated Learning - Time Breakdown per Round (Straggler Problem)')
     
-    # Rimuovi i duplicati dalla legenda
+    # Remove duplicate legend handles
     handles, labels = ax.get_legend_handles_labels()
     by_label = dict(zip(labels, handles))
     ax.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1), loc='upper left')
