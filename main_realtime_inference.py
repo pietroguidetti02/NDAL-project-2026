@@ -164,8 +164,8 @@ def run_realtime_simulation(file_path, n_sizes=[10, 15, 30, 60], X=5, num_simula
         print(summary)
         
         print("\n[*] Generazione Grafici...")
-        plot_inference_ecdf(results_df, x_thresholds=None, output_dir=output_dir)
-        plot_inference_boxplot(results_df, x_thresholds=None, output_dir=output_dir)
+        plot_inference_ecdf(results_df, x_thresholds=None, output_dir=output_dir, convert_to_seconds=False)
+        plot_inference_boxplot(results_df, x_thresholds=None, output_dir=output_dir, convert_to_seconds=False)
         print(f"[*] Tutti i grafici salvati in: {output_dir}")
     else:
         print("[!] Nessun risultato raccolto.")
