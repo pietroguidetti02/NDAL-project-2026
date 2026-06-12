@@ -516,13 +516,16 @@ def plot_roc_pr_curves_multi(metrics_dict, output_dir=None, prefix=''):
     """
     Plots multiple ROC and PR curves on the same graphs for easy comparison.
     metrics_dict format: {'Local A': metrics_obj, 'Local B': metrics_obj, 'Federated': metrics_obj, ...}
-    """
+    """    
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
     
     # ROC
     for name, m in metrics_dict.items():
-        if 'fpr' in m and 'tpr' in m:
-            axes[0].plot(m['fpr'], m['tpr'], lw=2, label=f"{name} (AUC={m.get('roc_auc',0):.2f})")
+        if m is not None and 'y_prob' in m and 'y_true' in m:
+            fpr, tpr, _ = roc_curve(m['y_true'], m['y_prob'])
+            roc_auc = auc(fpr, tpr)
+            axes[0].plot(fpr, tpr, lw=2, label=f"{name} (AUC={roc_auc:.3f})")
+            
     axes[0].plot([0, 1], [0, 1], color='gray', lw=2, linestyle='--', alpha=0.5)
     axes[0].set_xlabel('False Positive Rate')
     axes[0].set_ylabel('True Positive Rate')
@@ -532,8 +535,11 @@ def plot_roc_pr_curves_multi(metrics_dict, output_dir=None, prefix=''):
     
     # PR
     for name, m in metrics_dict.items():
-        if 'recall_curve' in m and 'precision_curve' in m:
-            axes[1].plot(m['recall_curve'], m['precision_curve'], lw=2, label=f"{name} (AUC={m.get('pr_auc',0):.2f})")
+        if m is not None and 'y_prob' in m and 'y_true' in m:
+            precision, recall, _ = precision_recall_curve(m['y_true'], m['y_prob'])
+            pr_auc = average_precision_score(m['y_true'], m['y_prob'])
+            axes[1].plot(recall, precision, lw=2, label=f"{name} (AUC={pr_auc:.3f})")
+            
     axes[1].set_xlabel('Recall')
     axes[1].set_ylabel('Precision')
     axes[1].set_title(f'[{prefix}] Precision-Recall Curve Comparison')

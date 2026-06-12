@@ -12,6 +12,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.utils.class_weight import compute_class_weight
 from multiprocessing.pool import ThreadPool
 import xgboost as xgb
+from sklearn.metrics import roc_curve, precision_recall_curve
 
 sys.path.append(os.getcwd())
 from src.data_loader import load_config, load_and_split_data
@@ -19,6 +20,24 @@ from src.models import evaluate_model, train_lstm
 from src.utils import plot_roc_pr_curves_2, plot_fl_training_times, plot_roc_pr_curves_multi
 from src.federated import FLClient, FLServer
 from main_comparison_LSTM import process_dataset_all
+
+# ==========================================
+# CUSTOM LOGGER TO DUPLICATE OUTPUT
+# ==========================================
+class TeeLogger(object):
+    def __init__(self, filename):
+        self.terminal = sys.stdout
+        self.log = open(filename, "a")
+
+    def write(self, message):
+        self.terminal.write(message)
+        self.log.write(message)
+        self.log.flush() # Forza la scrittura su file in tempo reale
+
+    def flush(self):
+        self.terminal.flush()
+        self.log.flush()
+# ==========================================
 
 def create_lstm_model(input_shape):
     import tensorflow as tf
@@ -58,14 +77,21 @@ def get_class_weights(y):
 def save_roc_pr_csv_multi(metrics_dict, output_dir, prefix):
     rows = []
     for model_name, m in metrics_dict.items():
-        if 'fpr' in m and 'tpr' in m:
-            for i in range(len(m['fpr'])):
-                rows.append({'Scenario': model_name, 'Curve': 'ROC', 'X': m['fpr'][i], 'Y': m['tpr'][i]})
-        if 'precision_curve' in m and 'recall_curve' in m:
-            for i in range(len(m['precision_curve'])):
-                rows.append({'Scenario': model_name, 'Curve': 'PR', 'X': m['recall_curve'][i], 'Y': m['precision_curve'][i]})
-    df = pd.DataFrame(rows)
-    df.to_csv(os.path.join(output_dir, f'{prefix}_roc_pr_data.csv'), index=False)
+        if m is not None and 'y_true' in m and 'y_prob' in m:
+            # Calcola le curve
+            fpr, tpr, _ = roc_curve(m['y_true'], m['y_prob'])
+            prec, rec, _ = precision_recall_curve(m['y_true'], m['y_prob'])
+            
+            # Appendi i risultati ROC
+            for i in range(len(fpr)):
+                rows.append({'Scenario': model_name, 'Curve': 'ROC', 'X': fpr[i], 'Y': tpr[i]})
+            # Appendi i risultati PR
+            for i in range(len(prec)):
+                rows.append({'Scenario': model_name, 'Curve': 'PR', 'X': rec[i], 'Y': prec[i]})
+                
+    if rows:
+        df = pd.DataFrame(rows)
+        df.to_csv(os.path.join(output_dir, f'{prefix}_roc_pr_data.csv'), index=False)
 
 def append_summary(file_path, record):
     df = pd.DataFrame([record])
@@ -86,6 +112,11 @@ def run_federated():
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = os.path.join("results", f"exp_federated_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
+
+    log_file_path = os.path.join(output_dir, f"console_output_{timestamp}.log")
+    sys.stdout = TeeLogger(log_file_path)
+    
+    print(f"[*] Logs are also being saved to: {log_file_path}")
     
     summary_csv_path = os.path.join(output_dir, 'federated_sweeping_summary.csv')
     
