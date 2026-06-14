@@ -70,7 +70,7 @@ def evaluate_model(model, X_test, y_test, threshold=0.5):
         else:
             y_prob = preds_raw
             
-    # Sanitize y_prob against NaNs (though we fixed the source, robustness is good)
+    # Sanitize y_prob against NaNs
     y_prob = np.nan_to_num(y_prob, nan=0.0)
             
     optimal_threshold = threshold
@@ -107,7 +107,7 @@ def train_lstm(X_train_seq, y_train, params=None):
     num_neg = np.sum(y_train == 0)
     num_pos = np.sum(y_train == 1)
     
-    # MAGIC TRICK FOR IMBALANCED DL: Set initial bias so the model doesn't panic in epoch 1
+    #Set initial bias so the model doesn't panic in epoch 1
     if num_pos > 0:
         initial_bias = np.log([num_pos / num_neg])
         output_bias = tf.keras.initializers.Constant(initial_bias)

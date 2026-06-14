@@ -9,7 +9,7 @@ def load_config(config_path):
     return config
 
 def get_file_paths(base_dir, direction):
-    # direction is like "A->B", we need to map it to "cpe_a-cpe_b"
+    # direction is like "A->B", we map it to "cpe_a-cpe_b"
     mapping = {
         "A->B": "cpe_a-cpe_b",
         "B->A": "cpe_b-cpe_a",
@@ -63,7 +63,7 @@ def load_and_split_data(config, base_dir="dataset"):
                 # We split the CSV into 10 continuous time-blocks.
                 # We alternate assigning blocks to train/test based on the ratio.
                 # This ensures we get data from ALL phases of the session, while 
-                # maintaining time-series continuity within each block!
+                # maintaining time-series continuity within each block
                 n_chunks = 10
                 chunk_size = len(df) // n_chunks
                 

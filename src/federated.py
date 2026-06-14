@@ -9,11 +9,11 @@ class FLClient:
         self.model = None
 
     def set_model(self, model):
-        """Assegna un modello compilato/inizializzato al client."""
+        """Assisgns a compiled/initialized model to the client."""
         self.model = model
 
     def get_weights(self):
-        """Estrae i pesi dal modello."""
+        """extracts the weights of the model in a format suitable for aggregation."""
         from sklearn.neural_network import MLPClassifier
         if isinstance(self.model, MLPClassifier):
             return {'coefs_': [np.copy(c) for c in self.model.coefs_], 
@@ -23,7 +23,7 @@ class FLClient:
             return self.model.get_weights()
 
     def set_weights(self, weights):
-        """Sovrascrive i pesi del modello."""
+        """Sets the weights of the model."""
         from sklearn.neural_network import MLPClassifier
         if isinstance(self.model, MLPClassifier):
             self.model.coefs_ = [np.copy(c) for c in weights['coefs_']]
@@ -32,11 +32,11 @@ class FLClient:
             self.model.set_weights(weights)
 
     def train(self, epochs=1, batch_size=256):
-        """Esegue il training locale sui dati del client."""
+        """executes local training on the client's data for a specified number of epochs."""
         start_time = time.perf_counter()
         from sklearn.neural_network import MLPClassifier
         if isinstance(self.model, MLPClassifier):
-            # partial_fit esegue esattamente 1 epoca (1 iterazione) sui dati forniti
+            # partial_fit executes one epoch of training on the data, so we loop for the specified number of epochs
             for _ in range(epochs):
                 self.model.partial_fit(self.X_train, self.y_train, classes=np.array([0, 1]))
         else:
@@ -51,13 +51,15 @@ class FLServer:
         pass
 
     def aggregate_weights(self, list_of_weights, model_type='mlp'):
-        """Esegue il Federated Averaging (FedAvg) matematico sui tensori."""
+        """executes the Federated Averaging (FedAvg) mathematical operation on the tensors."""
         if model_type == 'mlp':
+            # coefs are the weights of the model, so we need to average them across clients
             new_coefs = []
             for i in range(len(list_of_weights[0]['coefs_'])):
                 layer_coef = np.mean([w['coefs_'][i] for w in list_of_weights], axis=0)
                 new_coefs.append(layer_coef)
                 
+            #intercept are what the model uses to adjust the output of each neuron, so we need to average them as well
             new_intercepts = []
             for i in range(len(list_of_weights[0]['intercepts_'])):
                 layer_intercept = np.mean([w['intercepts_'][i] for w in list_of_weights], axis=0)
@@ -65,7 +67,7 @@ class FLServer:
                 
             return {'coefs_': new_coefs, 'intercepts_': new_intercepts}
         else:
-            # Keras (lista di array numpy)
+            # Keras (list of numpy arrays) more efficiently handled with numpy
             new_weights = []
             for i in range(len(list_of_weights[0])):
                 layer_w = np.mean([w[i] for w in list_of_weights], axis=0)
