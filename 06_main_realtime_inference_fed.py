@@ -12,7 +12,7 @@ from src.preprocessor import clean_data
 from src.features import engineer_features
 from src.utils import plot_inference_ecdf, plot_inference_boxplot
 
-def worker_simulation(model_type, N, delays, packet_loss, global_max, train_samples, actual_sims, start_idx):
+def worker_simulation(model_type, N, X_size, delays, packet_loss, global_max, train_samples, actual_sims, start_idx):
     import time
     import numpy as np
     import pandas as pd
@@ -20,7 +20,8 @@ def worker_simulation(model_type, N, delays, packet_loss, global_max, train_samp
     from src.features import engineer_features
     import warnings
 
-    # Generazione mini-dataset indipendente per ogni processo
+    NETWORK_DELAY_MS = 150.0
+
     X_tab = []
     X_seq = []
     y_train = []
@@ -51,7 +52,6 @@ def worker_simulation(model_type, N, delays, packet_loss, global_max, train_samp
     if 'MLP' in model_type:
         from sklearn.neural_network import MLPClassifier
         if 'Federated' in model_type:
-            # Simulate federated aggregation
             m1 = MLPClassifier(max_iter=1, random_state=42).fit(X_tab_scaled[::3], y_train_np[::3])
             m2 = MLPClassifier(max_iter=1, random_state=43).fit(X_tab_scaled[1::3], y_train_np[1::3])
             m3 = MLPClassifier(max_iter=1, random_state=44).fit(X_tab_scaled[2::3], y_train_np[2::3])
@@ -93,29 +93,69 @@ def worker_simulation(model_type, N, delays, packet_loss, global_max, train_samp
             return []
 
     results = []
-    print(f"      [{model_type}] Inizio simulazione LIVE su {actual_sims} pacchetti...")
+    print(f"      [{model_type}] Inizio simulazione ONLINE TRAINING LIVE su {actual_sims} pacchetti...")
     
     for i in range(start_idx, start_idx + actual_sims):
         lookback_delays = delays[i : i+N]
         lookback_losses = packet_loss[i : i+N]
         
-        start_time = time.perf_counter()
+        future_losses = packet_loss[i+N : i+N+X_size]
+        label = 1 if np.sum(future_losses) > 0 else 0
+        y_curr = np.array([label])
         
         if 'MLP' in model_type:
             feats = engineer_features(lookback_delays, lookback_losses, global_max_delay=global_max)
             feats_df = pd.DataFrame([feats])[feature_cols]
             f_scaled = tab_scaler.transform(feats_df)
-            _ = model.predict_proba(f_scaled)
+            
+            if 'Federated' in model_type:
+                t0 = time.perf_counter()
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    model.partial_fit(f_scaled, y_curr, classes=np.array([0, 1]))
+                t1 = time.perf_counter()
+                network_overhead_s = (NETWORK_DELAY_MS * 2) / 1000.0
+                t2 = time.perf_counter()
+                _ = model.predict_proba(f_scaled)
+                t3 = time.perf_counter()
+                total_time_s = (t1 - t0) + network_overhead_s + (t3 - t2)
+            else:
+                t0 = time.perf_counter()
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    model.partial_fit(f_scaled, y_curr, classes=np.array([0, 1]))
+                t1 = time.perf_counter()
+                t2 = time.perf_counter()
+                _ = model.predict_proba(f_scaled)
+                t3 = time.perf_counter()
+                total_time_s = (t1 - t0) + (t3 - t2)
+                
         elif 'LSTM' in model_type:
             seq_d = np.nan_to_num(lookback_delays, nan=global_max).reshape(-1, 1)
             seq_d_scaled = seq_scaler.transform(seq_d)
             seq_final = np.column_stack((seq_d_scaled, lookback_losses)).reshape(1, N, 2)
-            _ = model(seq_final, training=False)
             
-        end_time = time.perf_counter()
-        results.append({'Model': model_type, 'N': N, 'InferenceTime_ms': (end_time - start_time) * 1000.0})
+            if 'Federated' in model_type:
+                t0 = time.perf_counter()
+                model.fit(seq_final, y_curr, epochs=1, verbose=0)
+                t1 = time.perf_counter()
+                network_overhead_s = (NETWORK_DELAY_MS * 2) / 1000.0
+                t2 = time.perf_counter()
+                _ = model(seq_final, training=False)
+                t3 = time.perf_counter()
+                total_time_s = (t1 - t0) + network_overhead_s + (t3 - t2)
+            else:
+                t0 = time.perf_counter()
+                model.fit(seq_final, y_curr, epochs=1, verbose=0)
+                t1 = time.perf_counter()
+                t2 = time.perf_counter()
+                _ = model(seq_final, training=False)
+                t3 = time.perf_counter()
+                total_time_s = (t1 - t0) + (t3 - t2)
+            
+        results.append({'Model': model_type, 'N': N, 'InferenceTime_ms': total_time_s * 1000.0})
         
-        if i % 10000 == 0 and i > start_idx:
+        if i % 100 == 0 and i > start_idx:
             print(f"      [{model_type}] Elaborati {i - start_idx} pacchetti...")
             
     print(f"      [{model_type}] Simulazione completata.")
@@ -145,7 +185,7 @@ def run_realtime_simulation(dir_path, n_sizes=[10, 15, 30, 60], X=5, num_simulat
         print(f"\n{'='*50}\n[*] Avvio Pipeline Simulazione Multi-Processo per N={N}...\n{'='*50}")
         
         start_idx = train_samples + 100
-        max_possible_sims = len(delays) - start_idx - N + 1
+        max_possible_sims = len(delays) - start_idx - N - X + 1
         
         if num_simulations == 'infinity' or num_simulations == float('inf'):
             actual_sims = max_possible_sims
@@ -156,15 +196,15 @@ def run_realtime_simulation(dir_path, n_sizes=[10, 15, 30, 60], X=5, num_simulat
             print(f"  [!] Attenzione: dati insufficienti per avviare la simulazione con N={N}.")
             continue
 
-        print(f"  -> Avvio dei 4 processi paralleli (MLP_Centr, MLP_Fed, LSTM_Centr, LSTM_Fed)...")
-        print(f"  -> Ciascun processo effettuerà il setup e testerà {actual_sims} pacchetti sul proprio Core isolato.")
+        print(f"  -> Avvio dei 4 processi paralleli (MLP_Local, MLP_Fed, LSTM_Local, LSTM_Fed)...")
+        print(f"  -> Ciascun processo effettuerà l'update ONLINE su {actual_sims} pacchetti sul proprio Core.")
         
         with ProcessPoolExecutor(max_workers=4) as executor:
             futures = [
-                executor.submit(worker_simulation, 'MLP_Centralized', N, delays, packet_loss, global_max, train_samples, actual_sims, start_idx),
-                executor.submit(worker_simulation, 'MLP_Federated', N, delays, packet_loss, global_max, train_samples, actual_sims, start_idx),
-                executor.submit(worker_simulation, 'LSTM_Centralized', N, delays, packet_loss, global_max, train_samples, actual_sims, start_idx),
-                executor.submit(worker_simulation, 'LSTM_Federated', N, delays, packet_loss, global_max, train_samples, actual_sims, start_idx)
+                executor.submit(worker_simulation, 'MLP_Local', N, X, delays, packet_loss, global_max, train_samples, actual_sims, start_idx),
+                executor.submit(worker_simulation, 'MLP_Federated', N, X, delays, packet_loss, global_max, train_samples, actual_sims, start_idx),
+                executor.submit(worker_simulation, 'LSTM_Local', N, X, delays, packet_loss, global_max, train_samples, actual_sims, start_idx),
+                executor.submit(worker_simulation, 'LSTM_Federated', N, X, delays, packet_loss, global_max, train_samples, actual_sims, start_idx)
             ]
             
             for future in futures:
@@ -176,12 +216,11 @@ def run_realtime_simulation(dir_path, n_sizes=[10, 15, 30, 60], X=5, num_simulat
 
     results_df = pd.DataFrame(all_results)
     
-    # Salvataggio Report
     if output_dir and not results_df.empty:
         results_df.to_csv(os.path.join(output_dir, 'realtime_inference_results.csv'), index=False)
         
     print("\n" + "="*50)
-    print("=== REPORT INFERENZA REAL-TIME (Ms) ===")
+    print("=== REPORT LATENZA ONLINE LEARNING (Ms) ===")
     if not results_df.empty:
         summary = results_df.groupby(['Model', 'N'])['InferenceTime_ms'].agg(['mean', 'max', lambda x: np.percentile(x, 99)])
         summary.columns = ['Mean (ms)', 'Max (ms)', '99th Pct (ms)']
@@ -195,7 +234,6 @@ def run_realtime_simulation(dir_path, n_sizes=[10, 15, 30, 60], X=5, num_simulat
         print("[!] Nessun risultato raccolto.")
 
 if __name__ == '__main__':
-    # Fix per l'esecuzione del multiprocessing su sistemi Windows
     import multiprocessing
     multiprocessing.freeze_support()
     
@@ -206,6 +244,6 @@ if __name__ == '__main__':
     dir_to_use = r"dataset/second_capture_window"
             
     if os.path.exists(dir_to_use):
-        run_realtime_simulation(dir_to_use, n_sizes=[10, 15, 30, 60], X=1, num_simulations='infinity', output_dir=output_dir)
+        run_realtime_simulation(dir_to_use, n_sizes=[10, 15, 30, 60], X=1, num_simulations=500, output_dir=output_dir)
     else:
         print(f"[!] Errore: Cartella dataset '{dir_to_use}' non trovata per la simulazione.")
