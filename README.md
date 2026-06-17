@@ -21,8 +21,8 @@ NDAL-project-2026/
 ├── 01_exploratory_analysis.ipynb
 ├── 02_main_comparison_LSTM.py
 ├── 03_main_sweep.py
-├── 04_main_federated.py
-└── 05_main_realtime_inference.py
+├── 04_main_realtime_inference.py
+└── 05_main_federated.py
 ```
 
 ## 2. Setup and Installation
@@ -57,14 +57,19 @@ The project is structured into sequential experiments that cover all assignment 
 * **Purpose:** Sweeps across different values for the Lookback window ($N$) and Prediction window ($X$) to identify the optimal prediction horizon.
 * **Output:** Comparative ROC/PR curves and tabular metrics saved across sweeps.
 
-### Phase 4: Federated Learning (Advanced Task - 3pt)
-* **File:** `04_main_federated.py`
+### Phase 4: Additional Profiling (Extra)
+* **File:** `04_main_realtime_inference.py`
+* **Purpose:** Tests inference latency to ensure predictions fit within strict real-time routing constraints.
+
+### Phase 5: Federated Learning (Advanced Task - 3pt)
+* **File:** `05_main_federated.py`
 * **Purpose:** Simulates an SD-WAN Controller and 3 Local Clients. Performs Federated Averaging (FedAvg) and compares the performance of the Generalized Model versus the Local, CPE-specific models.
 * **Output:** Federated vs Local performance charts and training time analysis (Straggler effect).
 
-### Phase 5: Additional Profiling (Extra)
-* **File:** `05_main_realtime_inference.py`
-* **Purpose:** Tests inference latency to ensure predictions fit within strict real-time routing constraints.
+### Phase 6: Additional Profiling (Extra)
+* **File:** `06_main_realtime_inference_fed.py`
+* **Purpose:** Tests inference latency to ensure predictions fit within strict real-time routing constraints. Comparison between federated and centralized performances.
+
 
 ## 4. Key Findings & Conclusions
 * **Feature Importance:** Delay metrics (mean, quantiles) in the lookback window are highly predictive on certain links (e.g., `cpe_a-cpe_c`), while other links exhibit catastrophic packet drops with near-zero prior warning.

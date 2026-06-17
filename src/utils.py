@@ -445,6 +445,8 @@ def plot_inference_boxplot(results_df, x_thresholds=[1.0, 5.0, 10.0], output_dir
     plt.xlabel('Lookback Window Size (N)')
     plt.ylabel(f'Inference Time ({label_str})')
     
+    plt.yscale('log')
+    
     handles, labels = plt.gca().get_legend_handles_labels()
     by_label = dict(zip(labels, handles))
     plt.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1), loc='upper left')
