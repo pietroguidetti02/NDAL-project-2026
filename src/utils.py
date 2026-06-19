@@ -381,7 +381,10 @@ def plot_inference_ecdf(results_df, x_thresholds=[1.0, 5.0, 10.0], output_dir=No
     
     combinations = results_df[['Model', 'N']].drop_duplicates()
     
-    for _, row in combinations.iterrows():
+    import seaborn as sns
+    palette = sns.color_palette("husl", len(combinations))
+    
+    for i, (_, row) in enumerate(combinations.iterrows()):
         model = row['Model']
         n = row['N']
         mask = (results_df['Model'] == model) & (results_df['N'] == n)
@@ -392,7 +395,7 @@ def plot_inference_ecdf(results_df, x_thresholds=[1.0, 5.0, 10.0], output_dir=No
         x = np.sort(times) / scale  # Convert to seconds
         y = np.arange(1, len(x) + 1) / len(x)
         
-        plt.plot(x, y, lw=2, label=f'{model} (N={n})')
+        plt.plot(x, y, lw=2, color=palette[i], label=f'{model} (N={n})')
         
     if x_thresholds is not None:
         for thresh in x_thresholds:
@@ -435,7 +438,7 @@ def plot_inference_boxplot(results_df, x_thresholds=[1.0, 5.0, 10.0], output_dir
     df_plot = results_df.copy()
     df_plot['Plot_Time'] = df_plot['InferenceTime_ms'] / scale
     
-    sns.boxplot(data=df_plot, x='N', y='Plot_Time', hue='Model')
+    sns.boxplot(data=df_plot, x='N', y='Plot_Time', hue='Model', showfliers=False)
     
     if x_thresholds is not None:
         for thresh in x_thresholds:
@@ -455,6 +458,43 @@ def plot_inference_boxplot(results_df, x_thresholds=[1.0, 5.0, 10.0], output_dir
     plt.tight_layout()
     if output_dir:
         plt.savefig(os.path.join(output_dir, 'inference_boxplot.png'))
+    plt.show(block=False)
+    plt.pause(2)
+    plt.close()
+
+def plot_inference_barplot(results_df, x_thresholds=[1.0, 5.0, 10.0], output_dir=None, convert_to_seconds=True):
+    """
+    Plots a barplot of mean inference times across different N sizes for each model, with confidence intervals.
+    """
+    import seaborn as sns
+    plt.figure(figsize=(12, 7))
+    
+    scale = 1000.0 if convert_to_seconds else 1.0
+    unit_str = 's' if convert_to_seconds else 'ms'
+    label_str = 'Seconds' if convert_to_seconds else 'Milliseconds'
+    
+    df_plot = results_df.copy()
+    df_plot['Plot_Time'] = df_plot['InferenceTime_ms'] / scale
+    
+    # Using capsize for confidence interval error bars
+    sns.barplot(data=df_plot, x='N', y='Plot_Time', hue='Model', capsize=0.1)
+    
+    if x_thresholds is not None:
+        for thresh in x_thresholds:
+            plt.axhline(y=thresh, color='r', linestyle='--', alpha=0.7, label=f'Threshold X={thresh}{unit_str}')
+            
+    plt.title('Average Inference Latency with 95% Confidence Intervals')
+    plt.xlabel('Lookback Window Size (N)')
+    plt.ylabel(f'Mean Inference Time ({label_str})')
+    
+    handles, labels = plt.gca().get_legend_handles_labels()
+    by_label = dict(zip(labels, handles))
+    plt.legend(by_label.values(), by_label.keys(), bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+    plt.grid(True, alpha=0.3, axis='y')
+    plt.tight_layout()
+    if output_dir:
+        plt.savefig(os.path.join(output_dir, 'inference_barplot.png'))
     plt.show(block=False)
     plt.pause(2)
     plt.close()
