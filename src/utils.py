@@ -5,6 +5,8 @@ import xgboost as xgb
 from sklearn.metrics import ConfusionMatrixDisplay, roc_curve, auc, precision_recall_curve, average_precision_score
 import json
 
+#utility functions for model training, evaluation, and visualization
+
 def plot_feature_importance(model, feature_names=None, output_dir=None):
     """
     Plots feature importance for a given model (e.g. XGBoost).

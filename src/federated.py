@@ -1,6 +1,7 @@
 import numpy as np
 import time
 
+#we use class approach to encapsulate the client and server logic for federated learning
 class FLClient:
     def __init__(self, client_id, X_train, y_train):
         self.client_id = client_id

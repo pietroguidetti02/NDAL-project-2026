@@ -9,7 +9,7 @@ def plot_roc_for_model(base_dir, model_name, tunnel, output_path):
     # Find all folders corresponding to combinations
     folders = [f for f in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, f)) and f.startswith('N_')]
     
-    plt.figure(figsize=(22, 16))
+    plt.figure(figsize=(14, 16))
     
     # Store all curve data to sort them by AUC later
     curve_data = []

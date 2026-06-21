@@ -107,7 +107,8 @@ def train_lstm(X_train_seq, y_train, params=None):
     num_neg = np.sum(y_train == 0)
     num_pos = np.sum(y_train == 1)
     
-    #Set initial bias so the model doesn't panic in epoch 1
+    #Set initial bias so the model doesn't panic in epoch 1, we stasrt the model with a prior that reflects the imbalance in the data. 
+    # This can help stabilize training and lead to faster convergence.
     if num_pos > 0:
         initial_bias = np.log([num_pos / num_neg])
         output_bias = tf.keras.initializers.Constant(initial_bias)
@@ -115,15 +116,16 @@ def train_lstm(X_train_seq, y_train, params=None):
         output_bias = 'zeros'
         
     model = Sequential()
-    model.add(LSTM(32, input_shape=(X_train_seq.shape[1], X_train_seq.shape[2]), return_sequences=False))
-    model.add(Dropout(0.2))
-    model.add(Dense(16, activation='relu'))
-    model.add(Dense(1, activation='sigmoid', bias_initializer=output_bias))
+    model.add(LSTM(32, input_shape=(X_train_seq.shape[1], X_train_seq.shape[2]), return_sequences=False)) #32 neurons in 1 layer
+    model.add(Dropout(0.2)) #turns off 20% of the neurons during training to prevent overfitting
+    model.add(Dense(16, activation='relu')) #16 neurons in hidden layer with relu: used for hidden layers to introduce non-linearity and help the model learn complex patterns
+    model.add(Dense(1, activation='sigmoid', bias_initializer=output_bias))#decisiional neuron with sigmoid activation for binary classification
     
     # Use a slightly lower learning rate
     optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
     model.compile(optimizer=optimizer, loss='binary_crossentropy', metrics=['accuracy'])
     
+    #interrups automaticcaly training if validation loss doesn't improve for 3 epochs
     es = EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)
     
     # Calculate class weights safely

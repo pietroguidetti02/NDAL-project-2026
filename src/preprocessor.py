@@ -3,7 +3,7 @@ import numpy as np
 
 def clean_data(df):
     """
-    Creates a 'packet_loss' column based on delay_ms == -1, 
+    Creates a 'packet_loss' additional column based on delay_ms == -1, 
     and then replaces delay_ms = -1 with NaN to preserve true delay distribution.
     """
     df = df.copy()
@@ -17,7 +17,7 @@ def extract_sliding_windows(df, N, X):
     Extracts sliding windows of size N and labels based on the subsequent X seconds.
     N: lookback window size (in seconds / rows)
     X: prediction window size (in seconds / rows)
-    Assumes dataframe has 1 row per second granularity.
+    we assume dataframe has 1 row per second granularity.
     """
     windows = []
     labels = []

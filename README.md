@@ -47,12 +47,12 @@ The project is structured into sequential experiments that cover all assignment 
 * **Purpose:** Analyzes the correlation between delay and packet loss.
 * **Output:** Exploratory plots showing data distribution and signal behavior before failure events.
 
-### Phase 2: Model Training & Comparison (Requirement 2 & 3 - 12pt)
-* **File:** `02_main_comparison_LSTM.py`
+### Phase 2: Model Training & Comparison (Requirement 2 & 3)
+* **File:** `02_a_main_comparison_LSTM.py`,`02_b_main_comparison_LSTM.py`
 * **Purpose:** Trains XGBoost and a Neural Network (MLP), plus an LSTM baseline. Evaluates feature importance (SHAP/Gain) and handles class imbalance. It extracts features dynamically based on the Lookback window.
 * **Output:** Trained models, confusion matrices, feature importance plots, and PR-Curves in the `results/` folder.
 
-### Phase 3: Sliding Window N & X Tuning (Requirement 4 - 12pt)
+### Phase 3: Sliding Window N & X Tuning (Requirement 4)
 * **File:** `03_main_sweep.py`
 * **Purpose:** Sweeps across different values for the Lookback window ($N$) and Prediction window ($X$) to identify the optimal prediction horizon.
 * **Output:** Comparative ROC/PR curves and tabular metrics saved across sweeps.
@@ -61,7 +61,7 @@ The project is structured into sequential experiments that cover all assignment 
 * **File:** `04_main_realtime_inference.py`
 * **Purpose:** Tests inference latency to ensure predictions fit within strict real-time routing constraints.
 
-### Phase 5: Federated Learning (Advanced Task - 3pt)
+### Phase 5: Federated Learning (Advanced Task)
 * **File:** `05_main_federated.py`
 * **Purpose:** Simulates an SD-WAN Controller and 3 Local Clients. Performs Federated Averaging (FedAvg) and compares the performance of the Generalized Model versus the Local, CPE-specific models.
 * **Output:** Federated vs Local performance charts and training time analysis (Straggler effect).
