@@ -3,7 +3,8 @@ N: 15  # Lookback window (seconds)
 X: 10   # Prediction window (seconds)
 
 tunnel_types:                                                         
-  - mobile   
+  - mobile
+  - fiber      
 
 # Defining train/test split percentages for capture windows
 # Format: [percentage_window_1, percentage_window_2]
