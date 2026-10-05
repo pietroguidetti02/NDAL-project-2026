@@ -21,27 +21,22 @@ from src.plot_style import (apply_paper_style, save_figure, line_kwargs, bar_kwa
                             FIG_COLUMN, FIG_COLUMN_TALL, FIG_DOUBLE, MODEL_STYLE, SCOPE_STYLE,
                             LINK_STYLE, NEUTRAL)
 
-def newest(pattern, fallback):
-    """Newest directory matching pattern (e.g. a rerun with a timestamp suffix), else the fallback path."""
-    matches = sorted(glob.glob(pattern), key=os.path.getmtime)
-    return matches[-1] if matches else fallback
-
-
-# Reruns with every link at 1 Hz (config/*_1hz.yaml) take precedence over the original June runs.
+# All paper results live in results/paper/ (see results/paper/README.md for provenance).
+PAPER = 'results/paper'
 SWEEPS = {
-    'S1': ('Single dataset', newest('results/sweep_sweepS1_singleDS_1hz_*', 'results/S1-sweep_sweep_singleDS_20260612_140652')),
-    'S2': ('Spatial split', newest('results/sweep_sweepS2_spatial_split_1hz_*', 'results/S2-sweep_sweep_spatial_split_20260603_165949')),
-    'S3': ('Temporal split', newest('results/sweep_sweepS3_time_split_1hz_*', 'results/S3-sweep_sweep_time_split_20260603_165804')),
+    'S1': ('Single dataset', f'{PAPER}/accuracy/sweep_S1_1hz'),
+    'S2': ('Spatial split', f'{PAPER}/accuracy/sweep_S2_1hz'),
+    'S3': ('Temporal split', f'{PAPER}/accuracy/sweep_S3_1hz'),
 }
 SWEEP_MODELS = {'XGBoost': 'XGBoost', 'NN': 'MLP', 'LSTM': 'LSTM'}
-# Training-time figure: the seed-1 rerun runs alone on the server, so its timings are not contaminated.
-FL_DIR = newest('results/exp_federated_*_seed1', 'results/exp_federated_20260612_151021')
-_PI_FINAL = 'results/rasp/rasp_final_30000'
-PI_RUNS = ({'MLP': _PI_FINAL, 'LSTM': _PI_FINAL} if os.path.isdir(_PI_FINAL) else
-           {'MLP': 'results/rasp/rasp_mlp_5000_spread_1worker', 'LSTM': 'results/rasp/rasp_lstm_5000_spread_compiled'})
-# Optional: the same 08 script run on the x86 server, drawn as reference ticks on the Pi figure when present.
+FL_SEED_DIRS = sorted(glob.glob(f'{PAPER}/accuracy/fl_seed*'))
+# Training-time figure: seed 1 ran alone on the server, so its timings are not contaminated by other jobs.
+FL_DIR = f'{PAPER}/accuracy/fl_seed1'
+_PI = f'{PAPER}/latency/rpi3b_30000'
+PI_RUNS = {'MLP': _PI, 'LSTM': _PI}
+# Same 08 script and settings on the x86 server, drawn as reference ticks on the Pi figure.
 X86_MACHINES = [
-    ('x86 server, Intel i9', {'MLP': 'results/x86/i9_final_30000', 'LSTM': 'results/x86/i9_final_30000'}),
+    ('x86 server, Intel i9', {'MLP': f'{PAPER}/latency/i9_30000', 'LSTM': f'{PAPER}/latency/i9_30000'}),
 ]
 
 
@@ -120,7 +115,10 @@ def fig_link_characterization(out_dir):
     save_figure(fig, os.path.join(out_dir, 'fig_link_characterization'))
 
 
-def fig_horizon(out_dir, scenario='S3', N=30):
+DEFAULT_SCENARIO = 'S3'
+
+
+def fig_horizon(out_dir, scenario=DEFAULT_SCENARIO, N=30):
     _, sweep_dir = SWEEPS[scenario]
     fig, ax = plt.subplots(figsize=FIG_COLUMN)
     for file_tag, model in SWEEP_MODELS.items():
@@ -138,16 +136,16 @@ def fig_horizon(out_dir, scenario='S3', N=30):
     save_figure(fig, os.path.join(out_dir, 'fig_horizon'))
 
 
-def fig_pr_curves(out_dir, scenario='S3', N=30, X=5):
+def fig_pr_curves(out_dir, scenario=DEFAULT_SCENARIO, N=30, X=5):
     _, sweep_dir = SWEEPS[scenario]
     run_dir = os.path.join(sweep_dir, f'N_{N}_X_{X}')
     fig, ax = plt.subplots(figsize=FIG_COLUMN)
     for file_tag, model in SWEEP_MODELS.items():
         d = pd.read_csv(os.path.join(run_dir, f'mobile_{file_tag}_predictions.csv'))
         precision, recall, _ = precision_recall_curve(d['y_true'], d['y_prob'])
-        kw = line_kwargs(model)
-        kw.pop('marker')
-        ax.plot(recall, precision, **kw, label=f'{model} (PR-AUC {auc(recall, precision):.2f})')
+        # Markers spaced along the curve keep the models apart in B&W print.
+        ax.plot(recall, precision, **line_kwargs(model, markevery=0.1),
+                label=f'{model} (PR-AUC {auc(recall, precision):.2f})')
         op = json.load(open(os.path.join(run_dir, f'mobile_{file_tag}_metrics_summary.json')))
         ax.plot(op['recall'], op['precision'], linestyle='none', marker=MODEL_STYLE[model]['marker'],
                 color=MODEL_STYLE[model]['color'], markersize=9, markeredgecolor='white', markeredgewidth=1.2)
@@ -164,12 +162,13 @@ def fig_scenarios(out_dir, N=30, X=5):
     fig, ax = plt.subplots(figsize=FIG_COLUMN)
     width = 0.26
     for k, (file_tag, model) in enumerate(SWEEP_MODELS.items()):
-        values = [pr_auc_from_predictions(os.path.join(d, f'N_{N}_X_{X}', f'mobile_{file_tag}_predictions.csv'))
-                  for _, d in SWEEPS.values()]
+        paths = [os.path.join(d, f'N_{N}_X_{X}', f'mobile_{file_tag}_predictions.csv') for _, d in SWEEPS.values()]
+        values = [pr_auc_from_predictions(p) if os.path.exists(p) else np.nan for p in paths]
         pos = np.arange(len(SWEEPS)) + (k - 1) * width
         ax.bar(pos, values, width, **bar_kwargs(model), label=model)
         for p, v in zip(pos, values):
-            ax.text(p, v + 0.01, f'{v:.2f}', ha='center', va='bottom', fontsize=10, color=NEUTRAL['secondary'])
+            ax.text(p, (0 if np.isnan(v) else v) + 0.01, 'n/a' if np.isnan(v) else f'{v:.2f}',
+                    ha='center', va='bottom', fontsize=10, color=NEUTRAL['secondary'])
     ax.set_xticks(np.arange(len(SWEEPS)))
     ax.set_xticklabels([label for label, _ in SWEEPS.values()])
     ax.set_ylabel('PR-AUC')
@@ -181,7 +180,7 @@ def fig_scenarios(out_dir, N=30, X=5):
 
 def load_fl_summaries():
     """Multi-seed runs (results/exp_federated_*_seed*) when present, otherwise the single reference run."""
-    seed_files = sorted(glob.glob('results/exp_federated_*_seed*/federated_sweeping_summary.csv'))
+    seed_files = [os.path.join(d, 'federated_sweeping_summary.csv') for d in FL_SEED_DIRS]
     if seed_files:
         s = pd.concat([pd.read_csv(f) for f in seed_files], ignore_index=True)
     else:
@@ -219,7 +218,7 @@ def fig_fl_f1(out_dir):
         ax.set_title(model)
         ax.grid(axis='x', visible=False)
     axes[0].set_ylabel('F1-score' + (f' (mean $\\pm$ std, {n_seeds} seeds)' if n_seeds > 1 else ''))
-    axes[0].set_ylim(0, 0.4)
+    axes[0].set_ylim(0, max(0.4, axes[0].get_ylim()[1], axes[1].get_ylim()[1]))
     local_label = 'Local (mean over CPEs)' if n_seeds > 1 else 'Local (mean, min-max over CPEs)'
     fig.legend(handles=scope_legend_handles([('Local', local_label),
                                              ('Federated', 'Federated'), ('Centralized', 'Centralized')]),
@@ -257,7 +256,11 @@ def fig_fl_times(out_dir):
         ax.set_title(f'{model} (network: {network_s:.1f} s/round)')
         ax.grid(axis='x', visible=False)
     axes[0].set_ylabel('Time per FedAvg round [s]')
-    axes[0].legend(loc='upper left')
+    from matplotlib.patches import Patch
+    fig.legend(handles=[Patch(facecolor=NEUTRAL['muted'], edgecolor='white', label='Local compute'),
+                        Patch(facecolor=NEUTRAL['idle'], hatch='///', edgecolor='white', label='Idle (waiting for slowest CPE)'),
+                        Patch(facecolor=NEUTRAL['network'], edgecolor='white', label='Network')],
+               loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=3)
     fig.subplots_adjust(bottom=0.2)
     save_figure(fig, os.path.join(out_dir, 'fig_fl_times'))
 
@@ -336,7 +339,7 @@ FIGURES = {
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Generate the paper figures from saved results.")
     parser.add_argument('--only', nargs='*', default=None, help=f"Subset of figures: {list(FIGURES) + ['pi_latency']}")
-    parser.add_argument('--output_dir', type=str, default='results/paper_figures')
+    parser.add_argument('--output_dir', type=str, default='results/paper/figures')
     parser.add_argument('--rtt_ms', type=float, default=150.0, help="RTT charged to each FedAvg transfer.")
     parser.add_argument('--capacity_mbps', type=float, default=10.0, help="Assumed uplink/downlink capacity.")
     args = parser.parse_args()

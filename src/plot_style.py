@@ -8,11 +8,12 @@ FIG_COLUMN = (6.0, 3.8)
 FIG_COLUMN_TALL = (6.0, 5.2)
 FIG_DOUBLE = (12.0, 4.0)
 
-# Colorblind-validated categorical slots; identity is always doubled by a marker so figures survive B&W print.
+# Colorblind-validated categorical slots. Every model also has its own marker, line style and hatch, so a
+# figure stays readable in B&W print whenever the model is the only encoded variable.
 MODEL_STYLE = {
-    'XGBoost': {'color': '#2a78d6', 'marker': 'o'},
-    'MLP':     {'color': '#eb6834', 'marker': 's'},
-    'LSTM':    {'color': '#1baf7a', 'marker': '^'},
+    'XGBoost': {'color': '#2a78d6', 'marker': 'o', 'linestyle': '-',  'hatch': '\\\\\\'},
+    'MLP':     {'color': '#eb6834', 'marker': 's', 'linestyle': '--', 'hatch': 'xxx'},
+    'LSTM':    {'color': '#1baf7a', 'marker': '^', 'linestyle': ':',  'hatch': ''},
 }
 
 # Training scope is encoded with line style / hatch, never with a new hue, so it composes with MODEL_STYLE.
@@ -79,19 +80,22 @@ def apply_paper_style():
     })
 
 
-def line_kwargs(model, scope='Centralized', markevery=None):
+def line_kwargs(model, scope=None, markevery=None):
+    """Line style from the scope when scopes are compared, otherwise from the model (B&W-safe)."""
     style = MODEL_STYLE[canonical_model(model)]
     kwargs = {'color': style['color'], 'marker': style['marker'],
-              'linestyle': SCOPE_STYLE[scope]['linestyle'],
+              'linestyle': SCOPE_STYLE[scope]['linestyle'] if scope else style['linestyle'],
               'markerfacecolor': 'white', 'markeredgewidth': 1.4}
     if markevery is not None:
         kwargs['markevery'] = markevery
     return kwargs
 
 
-def bar_kwargs(model, scope='Centralized'):
-    return {'color': MODEL_STYLE[canonical_model(model)]['color'],
-            'hatch': SCOPE_STYLE[scope]['hatch'],
+def bar_kwargs(model, scope=None):
+    """Hatch from the scope when scopes are compared, otherwise from the model (B&W-safe)."""
+    style = MODEL_STYLE[canonical_model(model)]
+    return {'color': style['color'],
+            'hatch': SCOPE_STYLE[scope]['hatch'] if scope else style['hatch'],
             'edgecolor': 'white', 'linewidth': 1.0}
 
 
