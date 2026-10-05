@@ -30,6 +30,15 @@ def get_file_paths(base_dir, direction):
                 paths.append((window, file_path))
     return paths
 
+def keep_one_sample_per_second(df):
+    """
+    CPE_B's outgoing links carry two interleaved 1 Hz probe streams (gaps alternating 0.2 s / 0.8 s).
+    Keeping every other row leaves a single 1 Hz stream, so N and X mean seconds on every link.
+    """
+    if df['time'].diff().dt.total_seconds().median() < 0.75:
+        return df.iloc[::2].reset_index(drop=True)
+    return df
+
 def load_and_split_data(config, base_dir="dataset"):
     """
     Loads CSV data according to config splits and returns dicts of DataFrames 
@@ -52,7 +61,9 @@ def load_and_split_data(config, base_dir="dataset"):
             # Ensure time is datetime and sorted
             df['time'] = pd.to_datetime(df['time'])
             df = df.sort_values('time').reset_index(drop=True)
-            
+            if config.get('one_sample_per_second', False):
+                df = keep_one_sample_per_second(df)
+
             window_idx = 0 if window == 'first_capture_window' else 1
             train_pct = train_pcts[window_idx] / 100.0
             test_pct = test_pcts[window_idx] / 100.0

@@ -1,0 +1,15 @@
+# Minimum versions compatible with the tested environments (Python 3.13).
+# Raspberry Pi benchmark (08) ran with: tensorflow 2.21.0, keras 3.15.1, scikit-learn 1.9.1,
+# numpy 2.5.3, pandas 3.0.6, xgboost 3.4.1, scipy 1.18.1, joblib 1.6.0.
+pandas>=2.2
+numpy>=2.2
+scipy>=1.15
+scikit-learn>=1.6
+xgboost>=3.0
+tensorflow>=2.17
+imbalanced-learn>=0.14
+joblib>=1.3
+matplotlib>=3.10
+seaborn>=0.13
+shap>=0.46
+PyYAML>=6.0

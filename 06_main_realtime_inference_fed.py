@@ -15,7 +15,7 @@ from src.utils import plot_inference_ecdf, plot_inference_boxplot, plot_inferenc
 
 def worker_local_simulation(cpe_name, base_model, N, X_size, delays, packet_loss, global_max, train_samples, num_simulations):
     """
-    Simula una singola CPE puramente Locale sul suo streaming di dati (No server, No rete).
+    Simulates a single purely Local CPE on its own data stream (No server, No network).
     """
     import os
     os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
@@ -113,18 +113,18 @@ def worker_local_simulation(cpe_name, base_model, N, X_size, delays, packet_loss
         
         processed = i - start_idx + 1
         if processed % 1000 == 0 or processed == actual_sims:
-            print(f"      [{model_label} | N={N}] - Processati {processed}/{actual_sims} pacchetti...")
-        
-    print(f"      [{model_label} | N={N}] - Simulazione locale completata.")
+            print(f"      [{model_label} | N={N}] - Processed {processed}/{actual_sims} packets...")
+
+    print(f"      [{model_label} | N={N}] - Local simulation completed.")
     return results
 
 def worker_federated_simulation(base_model, N, X_size, cpe_data, global_max, train_samples, num_simulations):
     """
-    Simula l'architettura Federated REALE:
-    3 CPE leggono ognuna SOLO i propri file in parallelo (step-by-step).
-    Il server attende che tutte completino il calcolo, riceve i pesi, 
-    effettua il joint e weighting (FedAvg) e li rispedisce.
-    Tempo Costo = Max(Tempi CPE) + Network Overhead + Tempo di Media del Server.
+    Simulates the REAL Federated architecture:
+    3 CPEs each read ONLY their own files in parallel (step-by-step).
+    The server waits for all of them to finish computing, receives the weights,
+    aggregates and averages them (FedAvg), and sends them back.
+    Time Cost = Max(CPE Times) + Network Overhead + Server Averaging Time.
     """
     import os
     os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
@@ -137,7 +137,7 @@ def worker_federated_simulation(base_model, N, X_size, cpe_data, global_max, tra
     
     NETWORK_DELAY_MS = 150.0
     
-    # 1. Preparazione scalers per ogni CPE (storico locale)
+    # 1. Fit the scalers of each CPE on its local history
     cpe_names = list(cpe_data.keys())
     cpe_objects = {}
     
@@ -171,7 +171,7 @@ def worker_federated_simulation(base_model, N, X_size, cpe_data, global_max, tra
             'tab_scaler': tab_scaler, 'seq_scaler': seq_scaler, 'feature_cols': feature_cols
         }
 
-    # 2. Addestramento Base (Pre-training)
+    # 2. Base Training (Pre-training)
     cpe_models = {}
     if base_model == 'MLP':
         from sklearn.neural_network import MLPClassifier
@@ -194,9 +194,9 @@ def worker_federated_simulation(base_model, N, X_size, cpe_data, global_max, tra
             m = train_lstm(X_seq_np_scaled, cpe_objects[cpe]['y_train_np'], params={'epochs': 1, 'batch_size': 32, 'verbose': 0})
             cpe_models[cpe] = m
 
-    # 3. Simulazione Online Sincronizzata (Il vero Federated Server)
+    # 3. Synchronized Online Simulation (the real Federated Server)
     start_idx = train_samples + 100
-    # Ferma la simulazione quando il file più corto finisce, per mantenere il server sincronizzato
+    # Stops the simulation when the shortest file runs out, to keep the server synchronized
     max_possible_sims = min([len(cpe_data[c][0]) for c in cpe_names]) - start_idx - N - X_size + 1
     actual_sims = num_simulations if num_simulations not in ['infinity', float('inf')] else max_possible_sims
     actual_sims = min(int(actual_sims), max_possible_sims)
@@ -208,7 +208,7 @@ def worker_federated_simulation(base_model, N, X_size, cpe_data, global_max, tra
         cpe_update_times = []
         cpe_inference_times = []
         
-        # --- A. Fase LOCALE indipendente su ogni CPE (Processano SOLO i loro file) ---
+        # --- A. Independent LOCAL phase on each CPE (each processes ONLY its own files) ---
         for cpe in cpe_names:
             delays, packet_loss = cpe_data[cpe]
             lookback_delays = delays[i : i+N]
@@ -228,7 +228,7 @@ def worker_federated_simulation(base_model, N, X_size, cpe_data, global_max, tra
                 t3 = time.perf_counter()
                 cpe_inference_times.append(t3 - t2)
                 
-                # Update (Calcolo dei gradienti/pesi locali)
+                # Update (computing local gradients/weights)
                 t0 = time.perf_counter()
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
@@ -268,8 +268,8 @@ def worker_federated_simulation(base_model, N, X_size, cpe_data, global_max, tra
         t_server_1 = time.perf_counter()
         server_time = t_server_1 - t_server_0
         
-        # --- C. Costo del Federated (Tempo Totale Round) ---
-        # Il server attende il worker più lento + la latenza di rete A/R + il suo tempo di averaging
+        # --- C. Federated Cost (Total Round Time) ---
+        # The server waits for the slowest worker + the A/R network latency + its own averaging time
         max_cpe_time = max([upd + inf for upd, inf in zip(cpe_update_times, cpe_inference_times)])
         network_overhead_s = (NETWORK_DELAY_MS * 2) / 1000.0
         
@@ -279,15 +279,15 @@ def worker_federated_simulation(base_model, N, X_size, cpe_data, global_max, tra
         
         processed = i - start_idx + 1
         if processed % 1000 == 0 or processed == actual_sims:
-            print(f"      [{model_label} | N={N}] - Processati {processed}/{actual_sims} round sincronizzati...")
-            
-    print(f"      [{model_label} | N={N}] - Simulazione federata completata.")
+            print(f"      [{model_label} | N={N}] - Processed {processed}/{actual_sims} synchronized rounds...")
+
+    print(f"      [{model_label} | N={N}] - Federated simulation completed.")
     return results
 
 def run_realtime_simulation(dir_path, n_sizes=[10, 15, 30, 60], X=5, num_simulations=500, output_dir=None):
-    print(f"[*] Caricamento file per simulazione live da: {dir_path}")
-    
-    # Rigoroso caricamento locale: A elabora solo se sorgente=A
+    print(f"[*] Loading files for live simulation from: {dir_path}")
+
+    # Strict local loading: A only processes traffic where source=A
     cpe_map = {
         'CPE_A': ['cpe_a-cpe_b-mobile.csv', 'cpe_a-cpe_c-mobile.csv'],
         'CPE_B': ['cpe_b-cpe_a-mobile.csv', 'cpe_b-cpe_c-mobile.csv'],
@@ -318,7 +318,7 @@ def run_realtime_simulation(dir_path, n_sizes=[10, 15, 30, 60], X=5, num_simulat
     train_samples = 200
     
     for N in n_sizes:
-        print(f"\n{'='*50}\n[*] Avvio Pipeline Simulazione Sincronizzata per N={N} (8 Processi)...\n{'='*50}")
+        print(f"\n{'='*50}\n[*] Starting Synchronized Simulation Pipeline for N={N} (8 Processes)...\n{'='*50}")
         
         with ProcessPoolExecutor(max_workers=8) as executor:
             futures = []
@@ -340,7 +340,7 @@ def run_realtime_simulation(dir_path, n_sizes=[10, 15, 30, 60], X=5, num_simulat
                     res = future.result()
                     all_results.extend(res)
                 except Exception as e:
-                    print(f"  [!] Errore critico nel processo worker: {e}")
+                    print(f"  [!] Critical error in worker process: {e}")
 
     results_df = pd.DataFrame(all_results)
     
@@ -375,4 +375,4 @@ if __name__ == '__main__':
     if os.path.exists(dir_to_use):
         run_realtime_simulation(dir_to_use, n_sizes=[10, 15, 30, 60], X=1, num_simulations="infinity", output_dir=output_dir)
     else:
-        print(f"[!] Errore: Cartella dataset '{dir_to_use}' non trovata per la simulazione.")
+        print(f"[!] Error: dataset folder '{dir_to_use}' not found for the simulation.")

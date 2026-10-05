@@ -5,6 +5,8 @@ import xgboost as xgb
 from sklearn.metrics import ConfusionMatrixDisplay, roc_curve, auc, precision_recall_curve, average_precision_score
 import json
 
+
+
 #utility functions for model training, evaluation, and visualization
 
 def plot_feature_importance(model, feature_names=None, output_dir=None):
@@ -376,7 +378,7 @@ def plot_inference_ecdf(results_df, x_thresholds=[1.0, 5.0, 10.0], output_dir=No
     """
     plt.figure(figsize=(12, 7))
     
-    # Gestione scala e testi in base all'unità di misura
+    # Handle scale and labels based on the unit of measurement
     scale = 1000.0 if convert_to_seconds else 1.0
     unit_str = 's' if convert_to_seconds else 'ms'
     label_str = 'Seconds' if convert_to_seconds else 'Milliseconds'
@@ -409,7 +411,7 @@ def plot_inference_ecdf(results_df, x_thresholds=[1.0, 5.0, 10.0], output_dir=No
     
     max_x = results_df['InferenceTime_ms'].max() / scale
 
-    # Aggiunge un 10% di margine a destra per una visualizzazione ottimale
+    # Add a 10% right margin for readability
     plt.xlim(0, max_x * 1.1)
     
     # Fix duplicate legend entries for thresholds
@@ -432,7 +434,7 @@ def plot_inference_boxplot(results_df, x_thresholds=[1.0, 5.0, 10.0], output_dir
     import seaborn as sns
     plt.figure(figsize=(12, 7))
     
-    # Gestione scala e testi in base all'unità di misura
+    # Handle scale and labels based on the unit of measurement
     scale = 1000.0 if convert_to_seconds else 1.0
     unit_str = 's' if convert_to_seconds else 'ms'
     label_str = 'Seconds' if convert_to_seconds else 'Milliseconds'

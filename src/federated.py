@@ -1,6 +1,25 @@
 import numpy as np
 import time
 
+
+def payload_bytes(weights):
+    """Size in bytes of a model update as exchanged in FedAvg (raw tensor bytes, no serialization overhead)."""
+    if isinstance(weights, dict):
+        return sum(payload_bytes(v) for v in weights.values())
+    if isinstance(weights, (list, tuple)):
+        return sum(payload_bytes(w) for w in weights)
+    return int(np.asarray(weights).nbytes)
+
+
+def communication_time_s(n_bytes, rtt_ms, capacity_mbps):
+    """
+    Analytical FedAvg round communication cost. A round has two transfers (client update upload and
+    aggregated model download); each is charged one RTT plus its transmission time (conservative model).
+    """
+    per_transfer_s = rtt_ms / 1000.0 + (n_bytes * 8) / (capacity_mbps * 1e6)
+    return 2 * per_transfer_s
+
+
 #we use class approach to encapsulate the client and server logic for federated learning
 class FLClient:
     def __init__(self, client_id, X_train, y_train):
@@ -10,7 +29,7 @@ class FLClient:
         self.model = None
 
     def set_model(self, model):
-        """Assisgns a compiled/initialized model to the client."""
+        """Assigns a compiled/initialized model to the client."""
         self.model = model
 
     def get_weights(self):

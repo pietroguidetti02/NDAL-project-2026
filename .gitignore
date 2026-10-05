@@ -6,6 +6,9 @@ __pycache__/
 *.bat
 results/
 
+# Raw measurement data (too large / not meant for git history)
+dataset/**/*.csv
+
 # C extensions
 *.so
 

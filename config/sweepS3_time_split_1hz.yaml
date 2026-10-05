@@ -1,0 +1,25 @@
+# Same as sweepS3_time_split.yaml, but CPE_B's two interleaved probe streams are reduced to one (all links at 1 Hz).
+one_sample_per_second: true
+N_values: [10, 15, 20, 30, 60]
+X_values: [1, 5, 10, 15, 20]
+tunnel_types:
+  - mobile
+train_test_split:
+  A->B:
+    train: [0, 100]
+    test: [100, 0]
+  A->C:
+    train: [0, 100]
+    test: [100, 0]
+  B->A:
+    train: [0, 100]
+    test: [100, 0]
+  B->C:
+    train: [0, 100]
+    test: [100, 0]
+  C->A:
+    train: [0, 100]
+    test: [100, 0]
+  C->B:
+    train: [0, 100]
+    test: [100, 0]

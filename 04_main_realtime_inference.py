@@ -20,7 +20,7 @@ def worker_simulation(model_type, N, delays, packet_loss, global_max, train_samp
     from src.features import engineer_features
     import warnings
 
-    # Generazione mini-dataset indipendente per ogni processo
+    # Generate an independent mini-dataset for each process
     X_tab = []
     X_seq = []
     y_train = []
@@ -61,7 +61,7 @@ def worker_simulation(model_type, N, delays, packet_loss, global_max, train_samp
     elif model_type == 'LSTM':
         import tensorflow as tf
         from src.models import train_lstm
-        # IMPORTANTE: Limitiamo i thread di TF dentro al processo per evitare collisioni/SIGSEGV
+        # IMPORTANT: limit TF threads inside the process to avoid thread collisions / SIGSEGV
         tf.config.threading.set_inter_op_parallelism_threads(1)
         tf.config.threading.set_intra_op_parallelism_threads(1)
         tf.keras.backend.clear_session()
@@ -71,11 +71,11 @@ def worker_simulation(model_type, N, delays, packet_loss, global_max, train_samp
         try:
             model = train_lstm(X_seq_np_scaled, y_train_np, params={'epochs': 1, 'batch_size': 32, 'verbose': 0})
         except Exception as e:
-            print(f"[!] Errore setup LSTM nel worker: {e}")
+            print(f"[!] Error setting up LSTM in worker: {e}")
             return []
 
     results = []
-    print(f"      [{model_type}] Inizio simulazione LIVE su {actual_sims} pacchetti...")
+    print(f"      [{model_type}] Starting LIVE simulation on {actual_sims} packets...")
     
     for i in range(start_idx, start_idx + actual_sims):
         lookback_delays = delays[i : i+N]
@@ -92,20 +92,20 @@ def worker_simulation(model_type, N, delays, packet_loss, global_max, train_samp
             seq_d = np.nan_to_num(lookback_delays, nan=global_max).reshape(-1, 1)
             seq_d_scaled = seq_scaler.transform(seq_d)
             seq_final = np.column_stack((seq_d_scaled, lookback_losses)).reshape(1, N, 2)
-            # Uso chiamata diretta () invece di .predict() per mitigare overhead Keras su batch=1
+            # Direct call () instead of .predict() to mitigate Keras overhead on batch=1
             _ = model(seq_final, training=False)
             
         end_time = time.perf_counter()
         results.append({'Model': model_type, 'N': N, 'InferenceTime_ms': (end_time - start_time) * 1000.0})
         
         if i % 10000 == 0 and i > start_idx:
-            print(f"      [{model_type}] Elaborati {i - start_idx} pacchetti...")
-            
-    print(f"      [{model_type}] Simulazione completata.")
+            print(f"      [{model_type}] Processed {i - start_idx} packets...")
+
+    print(f"      [{model_type}] Simulation completed.")
     return results
 
 def run_realtime_simulation(file_path, n_sizes=[10, 15, 30, 60], X=5, num_simulations=500, output_dir=None):
-    print(f"[*] Caricamento file per simulazione live: {file_path}")
+    print(f"[*] Loading file for live simulation: {file_path}")
     df = pd.read_csv(file_path)
     df_clean = clean_data(df)
     
@@ -119,7 +119,7 @@ def run_realtime_simulation(file_path, n_sizes=[10, 15, 30, 60], X=5, num_simula
     train_samples = 200
     
     for N in n_sizes:
-        print(f"\n{'='*50}\n[*] Avvio Pipeline Simulazione Multi-Processo per N={N}...\n{'='*50}")
+        print(f"\n{'='*50}\n[*] Starting Multi-Process Simulation Pipeline for N={N}...\n{'='*50}")
         
         start_idx = train_samples + 100
         max_possible_sims = len(delays) - start_idx - N + 1
@@ -130,11 +130,11 @@ def run_realtime_simulation(file_path, n_sizes=[10, 15, 30, 60], X=5, num_simula
             actual_sims = min(int(num_simulations), max_possible_sims)
             
         if actual_sims <= 0:
-            print(f"  [!] Attenzione: dati insufficienti per avviare la simulazione con N={N}.")
+            print(f"  [!] Warning: insufficient data to start the simulation with N={N}.")
             continue
 
-        print(f"  -> Avvio dei 3 processi paralleli (XGBoost, MLP, LSTM)...")
-        print(f"  -> Ciascun processo effettuerà il setup e testerà {actual_sims} pacchetti sul proprio Core isolato.")
+        print(f"  -> Starting 3 parallel processes (XGBoost, MLP, LSTM)...")
+        print(f"  -> Each process will set up and test {actual_sims} packets on its own isolated Core.")
         
         with ProcessPoolExecutor(max_workers=3) as executor:
             futures = [
@@ -148,7 +148,7 @@ def run_realtime_simulation(file_path, n_sizes=[10, 15, 30, 60], X=5, num_simula
                     res = future.result()
                     all_results.extend(res)
                 except Exception as e:
-                    print(f"  [!] Errore critico nel processo worker: {e}")
+                    print(f"  [!] Critical error in worker process: {e}")
 
     results_df = pd.DataFrame(all_results)
     
@@ -171,7 +171,7 @@ def run_realtime_simulation(file_path, n_sizes=[10, 15, 30, 60], X=5, num_simula
         print("[!] Nessun risultato raccolto.")
 
 if __name__ == '__main__':
-    # Fix per l'esecuzione del multiprocessing su sistemi Windows
+    # Required for multiprocessing on Windows
     import multiprocessing
     multiprocessing.freeze_support()
     
@@ -179,10 +179,10 @@ if __name__ == '__main__':
     output_dir = os.path.join("results", f"exp_realtime_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
     
-    # File per test
+    # Test file
     test_file_to_use = r"dataset/second_capture_window/cpe_a-cpe_b-mobile.csv"
             
     if test_file_to_use and os.path.exists(test_file_to_use):
         run_realtime_simulation(test_file_to_use, n_sizes=[10, 15, 30, 60], X=1, num_simulations='infinity', output_dir=output_dir)
     else:
-        print(f"[!] Errore: File dataset '{test_file_to_use}' non trovato per la simulazione.")
+        print(f"[!] Error: dataset file '{test_file_to_use}' not found for the simulation.")

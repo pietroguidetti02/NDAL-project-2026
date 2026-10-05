@@ -19,7 +19,14 @@ from src.data_loader import load_config, load_and_split_data
 from src.models import evaluate_model, train_lstm
 from src.utils import plot_roc_pr_curves_2, plot_fl_training_times, plot_roc_pr_curves_multi
 from src.federated import FLClient, FLServer
-from main_comparison_LSTM import process_dataset_all
+
+# Loaded via importlib because the filename starts with a digit and is not a valid
+# Python module identifier, so a plain "import 02_b_main_comparison_LSTM" is not possible.
+import importlib.util
+spec = importlib.util.spec_from_file_location("main_comp", "02_b_main_comparison_LSTM.py")
+main_comp = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(main_comp)
+process_dataset_all = main_comp.process_dataset_all
 
 # ==========================================
 # CUSTOM LOGGER TO DUPLICATE OUTPUT
@@ -32,7 +39,7 @@ class TeeLogger(object):
     def write(self, message):
         self.terminal.write(message)
         self.log.write(message)
-        self.log.flush() # Forza la scrittura su file in tempo reale
+        self.log.flush() # Force real-time writes to the log file
 
     def flush(self):
         self.terminal.flush()
@@ -50,23 +57,23 @@ def create_lstm_model(input_shape):
     model.compile(optimizer='adam', loss='binary_crossentropy')
     return model
 
-def balance_tabular_data(X, y):
-    """Applica SMOTE se ci sono abbastanza campioni, altrimenti RandomOverSampler, altrimenti nulla."""
+def balance_tabular_data(X, y, seed=42):
+    """Applies SMOTE if there are enough samples, otherwise RandomOverSampler, otherwise nothing."""
     pos_count = np.sum(y == 1)
     if pos_count > 5:
-        # Abbastanza per SMOTE (default k_neighbors=5)
-        smote = SMOTE(random_state=42)
+        # Enough for SMOTE (default k_neighbors=5)
+        smote = SMOTE(random_state=seed)
         return smote.fit_resample(X, y)
     elif pos_count > 0:
-        # Troppo pochi per SMOTE, usiamo la duplicazione pura
-        ros = RandomOverSampler(random_state=42)
+        # Too few for SMOTE, fall back to plain duplication
+        ros = RandomOverSampler(random_state=seed)
         return ros.fit_resample(X, y)
     else:
-        # Nessun guasto in questo router! Impossibile bilanciare.
+        # No faults on this router! Balancing is not possible.
         return X, y
 
 def get_class_weights(y):
-    """Calcola i pesi delle classi per LSTM."""
+    """Computes the class weights for LSTM."""
     classes = np.unique(y)
     if len(classes) > 1:
         weights = compute_class_weight('balanced', classes=classes, y=y)
@@ -78,14 +85,14 @@ def save_roc_pr_csv_multi(metrics_dict, output_dir, prefix):
     rows = []
     for model_name, m in metrics_dict.items():
         if m is not None and 'y_true' in m and 'y_prob' in m:
-            # Calcola le curve
+            # Compute the curves
             fpr, tpr, _ = roc_curve(m['y_true'], m['y_prob'])
             prec, rec, _ = precision_recall_curve(m['y_true'], m['y_prob'])
             
-            # Appendi i risultati ROC
+            # Append the ROC points
             for i in range(len(fpr)):
                 rows.append({'Scenario': model_name, 'Curve': 'ROC', 'X': fpr[i], 'Y': tpr[i]})
-            # Appendi i risultati PR
+            # Append the PR points
             for i in range(len(prec)):
                 rows.append({'Scenario': model_name, 'Curve': 'PR', 'X': rec[i], 'Y': prec[i]})
                 
@@ -107,10 +114,14 @@ def run_federated():
     parser.add_argument('--local_epochs', type=int, default=3, help='Local training epochs per round')
     parser.add_argument('--network_delay', type=int, default=150, help='Network latency (ms) for weight upload/download')
     parser.add_argument('--n_sizes', type=int, nargs='+', default=[15, 30, 60], help='List of Lookback Windows (N) to sweep')
+    parser.add_argument('--seed', type=int, default=42, help='Seed for model initialization, resampling and TensorFlow')
     args = parser.parse_args()
 
+    import tensorflow as tf
+    tf.keras.utils.set_random_seed(args.seed)  # seeds Python, NumPy and TensorFlow at once
+
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = os.path.join("results", f"exp_federated_{timestamp}")
+    output_dir = os.path.join("results", f"exp_federated_{timestamp}_seed{args.seed}")
     os.makedirs(output_dir, exist_ok=True)
 
     log_file_path = os.path.join(output_dir, f"console_output_{timestamp}.log")
@@ -178,17 +189,17 @@ def run_federated():
             seq_sc[:,:,0] = seq_scaler.transform(flat_loc).reshape(d['X_seq'].shape[0], d['X_seq'].shape[1])
             d['X_seq_scaled'] = seq_sc
             
-            # BILANCIAMENTO LOCALE TABULARE PER MLP
-            d['X_scaled_bal'], d['y_bal'] = balance_tabular_data(d['X_scaled'], d['y'])
-            # PESI CLASSI LOCALI PER LSTM
+            # Local tabular rebalancing for the MLP
+            d['X_scaled_bal'], d['y_bal'] = balance_tabular_data(d['X_scaled'], d['y'], seed=args.seed)
+            # Local class weights for the LSTM
             d['class_weights'] = get_class_weights(d['y'])
             
         X_train_centr = pd.concat([d['X_scaled'] for d in clients_data.values()], ignore_index=True)
         y_train_centr = pd.concat([d['y'] for d in clients_data.values()], ignore_index=True)
         X_train_centr_seq = np.concatenate([d['X_seq_scaled'] for d in clients_data.values()], axis=0)
         
-        # BILANCIAMENTO GLOBALE CENTRALIZZATO
-        X_train_centr_bal, y_train_centr_bal = balance_tabular_data(X_train_centr, y_train_centr)
+        # Global rebalancing for the centralized baseline
+        X_train_centr_bal, y_train_centr_bal = balance_tabular_data(X_train_centr, y_train_centr, seed=args.seed)
         centr_class_weights = get_class_weights(y_train_centr)
         
         server = FLServer()
@@ -200,37 +211,37 @@ def run_federated():
         multi_metrics_mlp = {}
         
         print(f"\n--- SCENARIO 1: CENTRALIZED TRAINING (MLP) [N={N}] ---")
-        nn_base = MLPClassifier(max_iter=args.rounds * args.local_epochs, batch_size=256, random_state=42)
+        nn_base = MLPClassifier(max_iter=args.rounds * args.local_epochs, batch_size=256, random_state=args.seed)
         start_centr_mlp = time.perf_counter()
         nn_base.fit(X_train_centr_bal, y_train_centr_bal)
         time_centr_mlp = time.perf_counter() - start_centr_mlp
         metrics_centr_mlp = evaluate_model(nn_base, X_test_scaled, y_test)
         f1_centr_mlp = metrics_centr_mlp.get('f1', 0)
         print(f"  -> Total Time: {time_centr_mlp:.2f} s | F1: {f1_centr_mlp:.4f}")
-        append_summary(summary_csv_path, {'N': N, 'Model': 'MLP', 'Type': 'Centralized', 'Time_s': time_centr_mlp, 'F1_Score': f1_centr_mlp})
+        append_summary(summary_csv_path, {'Seed': args.seed, 'N': N, 'Model': 'MLP', 'Type': 'Centralized', 'Time_s': time_centr_mlp, 'F1_Score': f1_centr_mlp})
         multi_metrics_mlp['Centralized'] = metrics_centr_mlp
 
         print(f"\n--- SCENARIO 2: STRICTLY LOCAL MODELS (MLP) [N={N}] ---")
         for cid, d in clients_data.items():
-            loc_model = MLPClassifier(max_iter=args.rounds * args.local_epochs, batch_size=256, random_state=42)
+            loc_model = MLPClassifier(max_iter=args.rounds * args.local_epochs, batch_size=256, random_state=args.seed)
             start_loc = time.perf_counter()
             loc_model.fit(d['X_scaled_bal'], d['y_bal'])
             time_loc = time.perf_counter() - start_loc
             metrics_loc = evaluate_model(loc_model, X_test_scaled, y_test)
             f1_loc = metrics_loc.get('f1', 0)
             print(f"  -> {cid} Local Time: {time_loc:.2f} s | F1: {f1_loc:.4f} (Evaluated on Global Test Set)")
-            append_summary(summary_csv_path, {'N': N, 'Model': 'MLP', 'Type': f'Local_{cid}', 'Time_s': time_loc, 'F1_Score': f1_loc})
+            append_summary(summary_csv_path, {'Seed': args.seed, 'N': N, 'Model': 'MLP', 'Type': f'Local_{cid}', 'Time_s': time_loc, 'F1_Score': f1_loc})
             multi_metrics_mlp[f'Local {cid}'] = metrics_loc
 
         print(f"\n--- SCENARIO 3: FEDERATED LEARNING (MLP) [N={N}] ---")
-        global_mlp = MLPClassifier(hidden_layer_sizes=(100,), random_state=42)
+        global_mlp = MLPClassifier(hidden_layer_sizes=(100,), random_state=args.seed)
         global_mlp.partial_fit(X_train_centr_bal[:2], y_train_centr_bal[:2], classes=np.array([0, 1]))
         
         mlp_clients = []
         for cid in clients_data:
-            cm = MLPClassifier(hidden_layer_sizes=(100,), random_state=42)
+            cm = MLPClassifier(hidden_layer_sizes=(100,), random_state=args.seed)
             cm.partial_fit(X_train_centr_bal[:2], y_train_centr_bal[:2], classes=np.array([0, 1]))
-            # Passiamo i dati BILANCIATI al client FL!
+            # The FL client receives the REBALANCED local data
             c = FLClient(cid, clients_data[cid]['X_scaled_bal'], clients_data[cid]['y_bal'])
             c.set_model(cm)
             mlp_clients.append(c)
@@ -261,7 +272,7 @@ def run_federated():
         metrics_fed_mlp = evaluate_model(global_mlp, X_test_scaled, y_test)
         f1_fed_mlp = metrics_fed_mlp.get('f1', 0)
         print(f"  -> Total FEDERATED Time: {time_fed_mlp:.2f} s | F1: {f1_fed_mlp:.4f}")
-        append_summary(summary_csv_path, {'N': N, 'Model': 'MLP', 'Type': 'Federated', 'Time_s': time_fed_mlp, 'F1_Score': f1_fed_mlp})
+        append_summary(summary_csv_path, {'Seed': args.seed, 'N': N, 'Model': 'MLP', 'Type': 'Federated', 'Time_s': time_fed_mlp, 'F1_Score': f1_fed_mlp})
         multi_metrics_mlp['Federated'] = metrics_fed_mlp
         
         prefix_mlp = f'FL_MLP_N{N}'
@@ -279,13 +290,13 @@ def run_federated():
         print(f"\n--- SCENARIO 4: CENTRALIZED TRAINING (LSTM) [N={N}] ---")
         lstm_centr = create_lstm_model((N, 2))
         start_centr_lstm = time.perf_counter()
-        # Per LSTM usiamo i pesi delle classi per non toccare le sequenze
+        # For LSTM we use class weights instead of resampling, so the sequences are left untouched
         lstm_centr.fit(X_train_centr_seq, y_train_centr, epochs=args.rounds * args.local_epochs, batch_size=256, class_weight=centr_class_weights, verbose=0)
         time_centr_lstm = time.perf_counter() - start_centr_lstm
         metrics_centr_lstm = evaluate_model(lstm_centr, X_test_seq_scaled, y_test, threshold=0.5)
         f1_centr_lstm = metrics_centr_lstm.get('f1', 0)
         print(f"  -> Total Time: {time_centr_lstm:.2f} s | F1: {f1_centr_lstm:.4f}")
-        append_summary(summary_csv_path, {'N': N, 'Model': 'LSTM', 'Type': 'Centralized', 'Time_s': time_centr_lstm, 'F1_Score': f1_centr_lstm})
+        append_summary(summary_csv_path, {'Seed': args.seed, 'N': N, 'Model': 'LSTM', 'Type': 'Centralized', 'Time_s': time_centr_lstm, 'F1_Score': f1_centr_lstm})
         multi_metrics_lstm['Centralized'] = metrics_centr_lstm
 
         print(f"\n--- SCENARIO 5: STRICTLY LOCAL MODELS (LSTM) [N={N}] ---")
@@ -297,7 +308,7 @@ def run_federated():
             metrics_loc = evaluate_model(loc_model, X_test_seq_scaled, y_test, threshold=0.5)
             f1_loc = metrics_loc.get('f1', 0)
             print(f"  -> {cid} Local Time: {time_loc:.2f} s | F1: {f1_loc:.4f} (Evaluated on Global Test Set)")
-            append_summary(summary_csv_path, {'N': N, 'Model': 'LSTM', 'Type': f'Local_{cid}', 'Time_s': time_loc, 'F1_Score': f1_loc})
+            append_summary(summary_csv_path, {'Seed': args.seed, 'N': N, 'Model': 'LSTM', 'Type': f'Local_{cid}', 'Time_s': time_loc, 'F1_Score': f1_loc})
             multi_metrics_lstm[f'Local {cid}'] = metrics_loc
 
         print(f"\n--- SCENARIO 6: FEDERATED LEARNING (LSTM) [N={N}] ---")
@@ -305,12 +316,13 @@ def run_federated():
         lstm_clients = []
         for cid in clients_data:
             cm = create_lstm_model((N, 2))
-            # Aggiorniamo la classe FLClient se necessario, o aggiriamo passando class_weight al fit
-            # Dato che FLClient definisce il suo metodo train(), per semplicità non glieli passiamo,
-            # MA aspetta, il client LOCALE deve bilanciare altrimenti fa danni! 
-            # Dobbiamo assicurarci che FLClient usi class_weight.
+            # We could update the FLClient class to accept this, or work around it by passing
+            # class_weight directly to fit(). Since FLClient defines its own train() method,
+            # for simplicity we don't pass class_weight through it -- but the LOCAL client
+            # still needs to balance its classes, otherwise training is skewed.
+            # We make sure the manual fit call below uses class_weight instead.
             c = FLClient(cid, clients_data[cid]['X_seq_scaled'], clients_data[cid]['y'])
-            # Hack per passare class_weights dentro l'istanza client:
+            # Attach class_weights directly to the client instance:
             c.class_weights = clients_data[cid]['class_weights']
             c.set_model(cm)
             lstm_clients.append(c)
@@ -323,7 +335,7 @@ def run_federated():
             for c in lstm_clients: c.set_weights(glob_w)
                 
             def train_l(client): 
-                # Chiamata manuale a keras fit nel client data la mancanza del parametro class_weight in FLClient.train()
+                # Manual call to Keras fit on the client, since FLClient.train() doesn't support class_weight
                 start_time = time.perf_counter()
                 client.model.fit(client.X_train, client.y_train, epochs=args.local_epochs, batch_size=256, class_weight=client.class_weights, verbose=0)
                 return time.perf_counter() - start_time
@@ -345,7 +357,7 @@ def run_federated():
         metrics_fed_lstm = evaluate_model(global_lstm, X_test_seq_scaled, y_test, threshold=0.5)
         f1_fed_lstm = metrics_fed_lstm.get('f1', 0)
         print(f"  -> Total FEDERATED Time: {time_fed_lstm:.2f} s | F1: {f1_fed_lstm:.4f}")
-        append_summary(summary_csv_path, {'N': N, 'Model': 'LSTM', 'Type': 'Federated', 'Time_s': time_fed_lstm, 'F1_Score': f1_fed_lstm})
+        append_summary(summary_csv_path, {'Seed': args.seed, 'N': N, 'Model': 'LSTM', 'Type': 'Federated', 'Time_s': time_fed_lstm, 'F1_Score': f1_fed_lstm})
         multi_metrics_lstm['Federated'] = metrics_fed_lstm
         
         prefix_lstm = f'FL_LSTM_N{N}'
